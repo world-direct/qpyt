@@ -62,6 +62,9 @@ def main():
     if args.command == "build":
         build_firmware()
 
+    if args.command == "download-tools":
+        download_tools()
+
 
 class Runtime:
     def __init__(self):
@@ -761,6 +764,83 @@ def build_firmware(output_dir: str = None):
     print("Firmware build completed. Output pac file: %s" % output_pac)
     print("Hash of output pac: %s" % create_integrity_hash(output_pac))
 
+def download_tools():
+    """Download required tools from Quectel"""
+    import shutil
+    import os
+    import urllib.request
+    import tempfile
+
+    if os.name=='nt':
+        url="https://developer.quectel.com/en/wp-content/uploads/sites/2/2024/11/QPYcom_V3.9.0.zip"
+        file="QPYcom_V3.9.0.zip"
+        root=r"QPYcom_V3.9.0\exes"
+    elif os.name=='posix':
+        url="https://developer.quectel.com/en/wp-content/uploads/sites/2/2025/04/QPYcom_V3.0.1_Ubuntu24.tar.gz"
+        file="QPYcom_V3.0.1_Ubuntu24.tar.gz"
+        root="QPYcom_V3.0.1_Ubuntu24/exes/linux"
+    else:
+        raise Exception("Unsupported OS")
+
+    dest_dir = runtime.tools_dir
+    
+    # delete and recreate tools directory if exist
+    if os.path.exists(dest_dir):
+        shutil.rmtree(dest_dir)
+
+    os.makedirs(dest_dir)
+
+    # download the tool to tmp directory
+    archive_file = os.path.join(tempfile.gettempdir(), file)
+    if not os.path.exists(archive_file):
+        print(f"Downloading {url} to {archive_file}")
+        def download_with_progress(url, filename):
+            prev_percent = -1
+            def download_progress(block_num, block_size, total_size):
+                nonlocal prev_percent
+                downloaded = block_num * block_size
+                percent = min(100, downloaded * 100 // total_size) if total_size > 0 else 0
+                if percent != prev_percent:
+                    print(f"\rDownloading... {percent}%", end="", flush=True)
+                    prev_percent = percent
+            urllib.request.urlretrieve(url, filename, reporthook=download_progress)
+            print()  # Move to next line after download
+
+        download_with_progress(url, archive_file)
+    else:
+        print(f"File {archive_file} already exists, skipping download")
+
+    # extract the tar.gz file
+    print("Extracting tools...")
+    if os.name=='nt':
+        import zipfile
+        with zipfile.ZipFile(archive_file, 'r') as zip_ref:
+            zip_ref.extractall(tempfile.gettempdir())
+    elif os.name=='posix':
+        import tarfile
+        with tarfile.open(archive_file, "r:gz") as tar:
+            tar.extractall(path=tempfile.gettempdir(), filter="data")
+            
+    print("Copying extracted files...")
+    # move extracted files from subdirectory to tools directory
+    extracted_subdir = os.path.join(tempfile.gettempdir(), root)
+    for item in os.listdir(extracted_subdir):
+        s = os.path.join(extracted_subdir, item)
+        d = os.path.join(dest_dir, item)
+        if os.path.isdir(s):
+            if not os.path.exists(d):
+                os.makedirs(d)
+            for subitem in os.listdir(s):
+                shutil.move(os.path.join(s, subitem), d)
+        else:
+            shutil.move(s, d)
+
+    # delete the empty directories
+    print("Cleaning up...")
+    shutil.rmtree(extracted_subdir)
+
+    print("Tools downloaded and extracted to %s" % dest_dir)
+    
 
 def create_integrity_hash(file_path):
     import base64
