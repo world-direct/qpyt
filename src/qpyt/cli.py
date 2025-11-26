@@ -45,6 +45,9 @@ build_parser = subparsers.add_parser(
 build_parser.add_argument(
     "--version", type=str, help="Version string for the build", default="develop"
 )
+build_parser.add_argument(
+    "--out-dir", type=str, help="Output directory for built firmware", default=None
+)
 subparsers.add_parser("download-tools", help="Download the required tools from quectel")
 
 args = parser.parse_args()
@@ -60,11 +63,10 @@ def main():
         watch()
 
     if args.command == "build":
-        build_firmware()
+        build_firmware(args.out_dir)
 
     if args.command == "download-tools":
         download_tools()
-
 
 class Runtime:
     def __init__(self):
@@ -294,19 +296,45 @@ class Project:
             json.dump(app_info, f, indent=2)
             f.flush()
 
-    def watch(self):
+    def watch(self, terminal: "Terminal", fops: "TerminalFileOps"):
         """Watch source directory for changes and deploy to the board"""
 
         import watchfiles
-
-        # This naturally batches changes
         for changes in watchfiles.watch(self.dir):
+
+            changed_files = [] # type: list[ProjectUsrFsFile]
+            new_files = [] # type: list[ProjectUsrFsFile]
+            deleted_files = [] # type: list[ProjectUsrFsFile]
+
             # 'changes' is a set of all files that changed
             # This waits briefly and consolidates multiple changes
-            vprint(f"dedected {len(changes)} changes:")
             for change_type, path in changes:
                 # change-type: 1: added, 2: modified, 3: deleted
-                vprint(f"  {change_type}: {path}")
+                # check if path is in usrfs_files
+                rel_path = os.path.relpath(path, self.dir)
+                for fsfile in self.usrfs_files:
+                    fs_rel_path = os.path.relpath(fsfile.source_path, self.dir)
+                    if fs_rel_path == rel_path:
+                            vprint(f"Source change: {rel_path} (change type: {change_type})")
+
+                            if change_type == 2:
+                                changed_files.append(fsfile)
+
+                            elif change_type == 3:
+                                deleted_files.append(fsfile)
+        
+            # check if there are any changes
+            if not changed_files and not deleted_files:
+                continue
+            
+            terminal.interrupt()
+            # process changed files
+            for fsfile in changed_files:
+                fsfile.to_usr_fs(self)
+                fops.cp(fsfile.build_path, fsfile.target_path)
+
+            terminal.soft_reset()
+
 
     def deploy_to_board(self, fops: "TerminalFileOps"):
         """Deploy the current usrfs files to the board using the given TerminalFileOps"""
@@ -365,7 +393,9 @@ class Project:
         if path.startswith("/"):
             path = "." + path
 
-        dest_path = os.path.join(self.to_native(runtime.usrfs_path), self.to_native(path))
+        dest_path = os.path.join(
+            self.to_native(runtime.usrfs_path), self.to_native(path)
+        )
 
         return dest_path
 
@@ -581,6 +611,8 @@ class TerminalFileOps:
         return file_list
 
     def cp(self, local_src, remove_dest, block_size=512):
+        print(f"Copying file to board: {local_src} -> {remove_dest}")
+
         # open local file for reading
         with open(local_src, "rb") as f:
             # open remote file for writing
@@ -644,11 +676,7 @@ def watch():
     project.deploy_to_board(fops)
     hprint("Resetting device and watch for changes...")
     terminal.soft_reset()
-
-    for change in project.watch():
-        print(change)
-        pass
-
+    project.watch(terminal, fops)
 
 def build_firmware(output_dir: str = None):
     """Build the firmware package for flashing / app_fota"""
@@ -764,6 +792,7 @@ def build_firmware(output_dir: str = None):
     print("Firmware build completed. Output pac file: %s" % output_pac)
     print("Hash of output pac: %s" % create_integrity_hash(output_pac))
 
+
 def download_tools():
     """Download required tools from Quectel"""
     import shutil
@@ -771,19 +800,19 @@ def download_tools():
     import urllib.request
     import tempfile
 
-    if os.name=='nt':
-        url="https://developer.quectel.com/en/wp-content/uploads/sites/2/2024/11/QPYcom_V3.9.0.zip"
-        file="QPYcom_V3.9.0.zip"
-        root=r"QPYcom_V3.9.0\exes"
-    elif os.name=='posix':
-        url="https://developer.quectel.com/en/wp-content/uploads/sites/2/2025/04/QPYcom_V3.0.1_Ubuntu24.tar.gz"
-        file="QPYcom_V3.0.1_Ubuntu24.tar.gz"
-        root="QPYcom_V3.0.1_Ubuntu24/exes/linux"
+    if os.name == "nt":
+        url = "https://developer.quectel.com/en/wp-content/uploads/sites/2/2024/11/QPYcom_V3.9.0.zip"
+        file = "QPYcom_V3.9.0.zip"
+        root = r"QPYcom_V3.9.0\exes"
+    elif os.name == "posix":
+        url = "https://developer.quectel.com/en/wp-content/uploads/sites/2/2025/04/QPYcom_V3.0.1_Ubuntu24.tar.gz"
+        file = "QPYcom_V3.0.1_Ubuntu24.tar.gz"
+        root = "QPYcom_V3.0.1_Ubuntu24/exes/linux"
     else:
         raise Exception("Unsupported OS")
 
     dest_dir = runtime.tools_dir
-    
+
     # delete and recreate tools directory if exist
     if os.path.exists(dest_dir):
         shutil.rmtree(dest_dir)
@@ -794,15 +823,20 @@ def download_tools():
     archive_file = os.path.join(tempfile.gettempdir(), file)
     if not os.path.exists(archive_file):
         print(f"Downloading {url} to {archive_file}")
+
         def download_with_progress(url, filename):
             prev_percent = -1
+
             def download_progress(block_num, block_size, total_size):
                 nonlocal prev_percent
                 downloaded = block_num * block_size
-                percent = min(100, downloaded * 100 // total_size) if total_size > 0 else 0
+                percent = (
+                    min(100, downloaded * 100 // total_size) if total_size > 0 else 0
+                )
                 if percent != prev_percent:
                     print(f"\rDownloading... {percent}%", end="", flush=True)
                     prev_percent = percent
+
             urllib.request.urlretrieve(url, filename, reporthook=download_progress)
             print()  # Move to next line after download
 
@@ -812,15 +846,17 @@ def download_tools():
 
     # extract the tar.gz file
     print("Extracting tools...")
-    if os.name=='nt':
+    if os.name == "nt":
         import zipfile
-        with zipfile.ZipFile(archive_file, 'r') as zip_ref:
+
+        with zipfile.ZipFile(archive_file, "r") as zip_ref:
             zip_ref.extractall(tempfile.gettempdir())
-    elif os.name=='posix':
+    elif os.name == "posix":
         import tarfile
+
         with tarfile.open(archive_file, "r:gz") as tar:
             tar.extractall(path=tempfile.gettempdir(), filter="data")
-            
+
     print("Copying extracted files...")
     # move extracted files from subdirectory to tools directory
     extracted_subdir = os.path.join(tempfile.gettempdir(), root)
@@ -840,7 +876,7 @@ def download_tools():
     shutil.rmtree(extracted_subdir)
 
     print("Tools downloaded and extracted to %s" % dest_dir)
-    
+
 
 def create_integrity_hash(file_path):
     import base64
