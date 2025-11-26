@@ -5,7 +5,7 @@
             "name": "Deploy: Watch",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/build/deploy.py",
+            "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
             "args": ["watch"]
         }
