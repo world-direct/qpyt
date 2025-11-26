@@ -1,0 +1,3 @@
+# Requirements for QuecPython build and deploy tools
+pyserial>=3.5
+pyyaml>=6.0
