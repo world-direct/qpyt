@@ -458,12 +458,10 @@ class Project:
 
             # process deleted files
             for fsfile in deleted_files:
-                print(f"Deleting file on board: {fsfile.target_path}")
                 fops.remove(fsfile.target_path)
 
             # process new files
             for fsfile in new_files:
-                print(f"Adding new file on board: {fsfile.target_path}")
                 fsfile.to_usr_fs(self)
                 fops.cp(fsfile.build_path, fsfile.target_path)
 
@@ -501,7 +499,6 @@ class Project:
             fops.ensure_dir(remote_dir)
 
             # copy file
-            print(f"Copying file to board: {local} -> {remote}")
             fops.cp(local, remote)
 
 
@@ -656,9 +653,11 @@ class TerminalFileOps:
         return data
 
     def remove(self, path):
+        print(f"Removing file on board: {path}")
         self.terminal.execute_command(f"import uos;uos.remove('{path}')")
 
     def mkdir(self, path):
+        print(f"Creating directory on board: {path}")
         self.terminal.execute_command(f"import uos;uos.mkdir('{path}')")
 
     def lsusr(self) -> list[BoardFile]:
