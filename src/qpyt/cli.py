@@ -301,7 +301,7 @@ class ProjectUsrFsFile:
         self.build_path = build_path
         self.target_path = target_path
 
-    def to_usr_fs(self, project: "Project"):
+    def to_usr_fs(self):
         """Copy or compile the file to the temp usr fs directory"""
         # build output path
         dest_path = self.build_path
@@ -314,14 +314,74 @@ class ProjectUsrFsFile:
         # copy or compile file
         if self.entry.compile and self.source_path.endswith(".py"):
             # compile to .mpy
-            print(f"Compiling {self.source_path} to {dest_path}")
-            runtime.compile_mpy(self.source_path, dest_path)
+            if os.path.exists(dest_path) and os.path.getmtime(self.source_path) == os.path.getmtime(dest_path):
+                vprint(f"Skipping compile of {self.source_path} to {dest_path} because modification time is the same")
+            else:
+                print(f"Compiling {self.source_path} to {dest_path}")
+                runtime.compile_mpy(self.source_path, dest_path)
+
+                # set modification time of dest to source
+                os.utime(dest_path, (os.path.getatime(self.source_path), os.path.getmtime(self.source_path)))
         else:
-            # copy file
-            print(f"Copying {self.source_path} to {dest_path}")
-            shutil.copy2(self.source_path, dest_path)
+            # copy file if modification time is different
+            if os.path.exists(dest_path) and os.path.getmtime(self.source_path) == os.path.getmtime(dest_path):
+                vprint(f"Skipping copy of {self.source_path} to {dest_path} because modification time is the same")
+            else:
+                print(f"Copying {self.source_path} to {dest_path}")
+                shutil.copy2(self.source_path, dest_path)
 
+class ProjectUsrFs:
+    def __init__(self):
+        self.files = [] # type: list[ProjectUsrFsFile]
 
+        # add the app_info.json to usrfs_sysfiles
+        self.fileinfo = ProjectUsrFsFile(
+            entry=None,
+            source_path=None,
+            build_path=runtime.to_temp_usrfs(Project.APP_INFO_PATH),
+            target_path=Project.APP_INFO_PATH,
+        )
+
+    def add_files(self, files: list["ProjectUsrFsFile"]):
+        """Add files to the usrfs"""
+        self.files.extend(files)
+
+    def all_files(self) -> list["ProjectUsrFsFile"]:
+        """Get all files including app_info.json"""
+        return self.files + [self.fileinfo]
+    
+    def remove(self, fsfile: "ProjectUsrFsFile"):
+        """Remove a file from the usrfs"""
+        self.files.remove(fsfile)
+    
+    def usr_files(self) -> list["ProjectUsrFsFile"]:
+        """Get all usr files without app_info.json"""
+        return self.files
+    
+    def build(self, project: "Project"):
+        """Builds the usrfs into the temp directory including creating app_info.json"""
+
+        file_list = []  # type: list[dict]
+        for file in self.files:
+            file.to_usr_fs()
+            file_list.append(
+                {
+                    "path": runtime.to_board_fs(file.target_path),
+                    "size": os.path.getsize(file.build_path),
+                    "integrity": runtime.create_integrity_hash(file.build_path),
+                }
+            )
+
+        # write file list to output_dir/app_info.json
+        print("Generating app_info.json")
+        import json
+
+        app_info_json_path = os.path.join(runtime.usrfs_path, "usr", "app_info.json")
+        with open(app_info_json_path, "w") as f:
+            app_info = {"version": project.version, "files": file_list}
+            json.dump(app_info, f, indent=2)
+            f.flush()
+    
 class Project:
     """Represents a Quectel project defined by project.yaml"""
 
@@ -333,15 +393,7 @@ class Project:
 
         self.dir = os.path.dirname(path)
         self.usrfs_entries = []  # type: list[ProjectUsrFsEntry]
-        self.usrfs_files = []  # type: list[ProjectUsrFsFile]
-
-        # add the app_info.json to usrfs_sysfiles
-        self.usrfs_fileinfo = ProjectUsrFsFile(
-            entry=None,
-            source_path=None,
-            build_path=runtime.to_temp_usrfs(Project.APP_INFO_PATH),
-            target_path=Project.APP_INFO_PATH,
-        )
+        self.usrfs = ProjectUsrFs()
 
     def set_version(self, version: str):
         """Set the project version"""
@@ -371,30 +423,10 @@ class Project:
 
             self.usrfs_entries.append(entry)
             files = entry.glob_files(self)
-            self.usrfs_files.extend(files)
+            self.usrfs.add_files(files)
 
         hprint("Building /usr filesystem into", runtime.usrfs_path)
-
-        file_list = []  # type: list[dict]
-        for file in self.usrfs_files:
-            file.to_usr_fs(self)
-            file_list.append(
-                {
-                    "path": runtime.to_board_fs(file.target_path),
-                    "size": os.path.getsize(file.build_path),
-                    "integrity": runtime.create_integrity_hash(file.build_path),
-                }
-            )
-
-        # write file list to output_dir/app_info.json
-        print("Generating app_info.json")
-        import json
-
-        app_info_json_path = os.path.join(runtime.usrfs_path, "usr", "app_info.json")
-        with open(app_info_json_path, "w") as f:
-            app_info = {"version": self.version, "files": file_list}
-            json.dump(app_info, f, indent=2)
-            f.flush()
+        self.usrfs.build(self)
 
     def watch(self, terminal: "Terminal", fops: "TerminalFileOps"):
         """Watch source directory for changes and deploy to the board"""
@@ -429,11 +461,11 @@ class Project:
 
                         if file is not None:
                             new_files.append(file)
-                            self.usrfs_files.append(file)
+                            self.usrfs.add_files(files)
                             break
 
                 # for existing files check if path is in usrfs_files
-                fsfile = find_usrfs_file_by_path(self.usrfs_files, path)
+                fsfile = find_usrfs_file_by_path(self.usrfs.files, path)
                 if fsfile is None:
                     # change not in project usrfs, skip
                     continue
@@ -442,18 +474,18 @@ class Project:
                     changed_files.append(fsfile)
 
                 elif change_type == 3:
-                    self.usrfs_files.remove(fsfile)
+                    self.usrfs.remove(fsfile)
                     deleted_files.append(fsfile)
 
             # check if there are any changes
             if not changed_files and not deleted_files and not new_files:
                 continue
-
+            
+            self.usrfs.build(self)
             terminal.ensure_ready()
 
             # process changed files
             for fsfile in changed_files:
-                fsfile.to_usr_fs(self)
                 fops.cp(fsfile.build_path, fsfile.target_path)
 
             # process deleted files
@@ -462,7 +494,7 @@ class Project:
 
             # process new files
             for fsfile in new_files:
-                fsfile.to_usr_fs(self)
+                fsfile.to_usr_fs()
                 fops.cp(fsfile.build_path, fsfile.target_path)
 
             terminal.soft_reset()
@@ -472,15 +504,16 @@ class Project:
 
         hprint("Deploying files to board...")
         board_files = fops.lsusr()
-        project_files = self.usrfs_files
+        project_files = self.usrfs.all_files()  # type: list[ProjectUsrFsFile]
         board_files_dict = {bf.path: bf for bf in board_files}
 
         # get all files that exist on the board and the project, but have a different size
         files2cp = []
-        for pf in project_files + [self.usrfs_fileinfo]:
+        for pf in project_files:
             bf = board_files_dict.get(pf.target_path)
             if bf is not None:
-                if bf.size != os.path.getsize(pf.build_path):
+                # currently we always assume app_info.json is modified, bc for edits the size will not change
+                if bf.size != os.path.getsize(pf.build_path) or pf.target_path == Project.APP_INFO_PATH:
                     print(
                         f"File modified: {pf.target_path} (board size: {bf.size}, project size: {os.path.getsize(pf.build_path)})"
                     )
