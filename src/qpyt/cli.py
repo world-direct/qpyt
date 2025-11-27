@@ -79,7 +79,10 @@ def main():
         sys.exit(1)
 
     if args.command == "watch":
-        watch()
+        try:
+            watch()
+        except KeyboardInterrupt:
+            hprint("Watch interrupted by user")
 
     if args.command == "build":
         build_firmware(args.out_dir)
