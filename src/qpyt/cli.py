@@ -558,7 +558,7 @@ class Terminal:
 
         port = Terminal.find_serial_port(port)
         try:
-            self._ser = serial.Serial(port, baud)
+            self._ser = serial.serial_for_url(port)
         except Exception as e:
             print(f"Failed to open serial port {port}: {e}")
             exit(1)
@@ -600,7 +600,6 @@ class Terminal:
             else:
                 # Small sleep to prevent CPU spinning
                 import time
-
                 time.sleep(0.01)
 
     def execute_command(self, command, data: StringIO = None, timeout=5.0):
@@ -661,6 +660,18 @@ class Terminal:
     @staticmethod
     def find_serial_port(port: str):
         """Try to find the serial port by name or description"""
+
+        # rfc2217://localhost:1111
+        if port.startswith("rfc2217://"):
+            print("Using RFC2217 port:", port)
+            return port
+        
+        # check if it is just HOST:PORT
+        if ":" in port and not port.startswith("/"):
+            uri = "rfc2217://" + port
+            print("Using RFC2217 port:", uri)
+            return uri
+
         import serial.tools.list_ports
 
         ports = list(serial.tools.list_ports.comports())

@@ -26,6 +26,14 @@
             "args": ["download-tools"]
         },
         {
+            "name": "qphy attach",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/qphy.py",
+            "console": "integratedTerminal",
+            "args": ["attach"]
+        },
+        {
             "name": "qphy port-server",
             "type": "debugpy",
             "request": "launch",
