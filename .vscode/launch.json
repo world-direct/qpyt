@@ -24,6 +24,14 @@
             "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
             "args": ["download-tools"]
+        },
+        {
+            "name": "qphy port-server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/qphy.py",
+            "console": "integratedTerminal",
+            "args": ["port-server"]
         }
     ]
 }
