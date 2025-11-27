@@ -79,6 +79,10 @@ portserver_parser.add_argument(
     "--listen-port", type=int, help="Port to listen on for incoming TCP connections", default=15612
 )
 
+portserver_parser.add_argument(
+    "--listen-ip", type=str, help="IP address to listen on for incoming TCP connections", default="0.0.0.0"
+)
+
 args = parser.parse_args()
 verbose = args.verbose
 
@@ -107,7 +111,7 @@ def main():
         cleanup_board()
 
     if args.command == "port-server":
-        start_port_server(args.listen_port)
+        start_port_server(args.listen_ip, args.listen_port)
 
 class Runtime:
     def __init__(self):
@@ -1138,7 +1142,7 @@ def cleanup_board():
     time.sleep(1)
     terminal.close()
 
-def start_port_server(listen_port:int):
+def start_port_server(listen_ip:str, listen_port:int):
     """Start a RFC2217 serial port server to share the device over network"""
 
     # this is adapted from the rfc2217_server.py example in pyserial#
@@ -1269,11 +1273,19 @@ def start_port_server(listen_port:int):
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(('0.0.0.0', listen_port))
+    srv.bind((listen_ip, listen_port))
     srv.listen(1)
     logging.info("TCP/IP port: {}".format(listen_port))
+
+    import select
+
     while True:
         try:
+            ready, _, _ = select.select([srv], [], [], 1.0)  # 1 second timeout
+            if not ready:
+                time.sleep(0.1)
+                continue
+
             client_socket, addr = srv.accept()
             logging.info('Connected by {}:{}'.format(addr[0], addr[1]))
             client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
