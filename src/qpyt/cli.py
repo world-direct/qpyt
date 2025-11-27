@@ -7,40 +7,55 @@ import threading
 import time
 from io import StringIO
 
-parser = argparse.ArgumentParser(description="Deploy firmware")
-subparsers = parser.add_subparsers(dest="command")
-parser.add_argument(
+# Create parent parsers with common arguments
+global_flags = argparse.ArgumentParser(add_help=False)
+global_flags.add_argument(
     "--verbose", action="store_true", help="Enable verbose output", default=False
 )
 
+serial_flags = argparse.ArgumentParser(add_help=False)
+serial_flags.add_argument(
+    "--port",
+    type=str,
+    help="Serial port for deployment, can be a COM port or part of the description to auto-detect",
+    default="Quectel USB REPL Port",
+)
+
+serial_flags.add_argument(
+    "--baud", type=int, help="Baud rate for serial port", default=115200
+)
+
+parser = argparse.ArgumentParser(
+    description="QuecPython project script", parents=[global_flags]
+)
+subparsers = parser.add_subparsers(dest="command")
 parser.add_argument(
     "--project", type=str, help="Path to project.yaml", default="./project.yaml"
 )
 
 parser.add_argument(
-    "--port",
-    type=str,
-    help="Serial port for deployment",
-    default="Quectel USB REPL Port",
-)
-parser.add_argument(
-    "--baud", type=int, help="Baud rate for serial port", default=115200
-)
-parser.add_argument(
     "--qphy-dir", help="Path of qphy directory, defaults to .qphy", default=r".qphy"
 )
 
 watch_parser = subparsers.add_parser(
-    "watch", help="Watch source directory for changes and deploys it to the board"
+    "watch",
+    parents=[global_flags, serial_flags],
+    help="Watch source directory for changes and deploys it to the board",
 )
 attach_parser = subparsers.add_parser(
-    "attach", help="Attach to the board's REPL terminal"
+    "attach",
+    parents=[global_flags, serial_flags],
+    help="Attach to the board's REPL terminal",
 )
 cleanup_parser = subparsers.add_parser(
-    "cleanup", help="deletes all files in /usr on the board"
+    "cleanup",
+    parents=[global_flags, serial_flags],
+    help="deletes all files in /usr on the board",
 )
 build_parser = subparsers.add_parser(
-    "build", help="Build the project output files for flashing / app_fota"
+    "build",
+    parents=[global_flags],
+    help="Build the project output files for flashing / app_fota",
 )
 build_parser.add_argument(
     "--version", type=str, help="Version string for the build", default="develop"
@@ -48,7 +63,11 @@ build_parser.add_argument(
 build_parser.add_argument(
     "--out-dir", type=str, help="Output directory for built firmware", default=None
 )
-subparsers.add_parser("download-tools", help="Download the required tools from quectel")
+subparsers.add_parser(
+    "download-tools",
+    parents=[global_flags],
+    help="Download the required tools from quectel",
+)
 
 args = parser.parse_args()
 verbose = args.verbose
@@ -67,6 +86,12 @@ def main():
 
     if args.command == "download-tools":
         download_tools()
+
+    if args.command == "attach":
+        attach_terminal()
+
+    if args.command == "cleanup":
+        cleanup_board()
 
 
 class Runtime:
@@ -220,7 +245,6 @@ class ProjectUsrFsEntry:
         self.glob = glob
         self.compile = compile
 
-
     def glob_files(self, project: "Project"):
         # glob the source path
         import glob
@@ -229,7 +253,7 @@ class ProjectUsrFsEntry:
         local_root_path = pathlib.Path(rootdir)
         target_root_path = pathlib.PurePosixPath(self.dest)
 
-        files = [] # type: list["ProjectUsrFsFile"]
+        files = []  # type: list["ProjectUsrFsFile"]
         for res in glob.glob(self.glob, root_dir=rootdir, recursive=True):
             # res can be in windows style, so we convert it
             res = runtime.to_posix(res)
@@ -252,6 +276,7 @@ class ProjectUsrFsEntry:
             files.append(fsfile)
 
         return files
+
 
 class ProjectUsrFsFile:
     r"""Represents a file in the usr filesystem of the project
@@ -382,7 +407,7 @@ class Project:
                 fs_rel_path = os.path.relpath(fsfile.source_path, self.dir)
                 if fs_rel_path == rel_path:
                     return fsfile
-                
+
             return None
 
         for changes in watchfiles.watch(self.dir):
@@ -395,7 +420,7 @@ class Project:
             for change_type, path in changes:
                 # change-type: 1: added, 2: modified, 3: deleted
 
-                # for new files glob all entries again to check if the file 
+                # for new files glob all entries again to check if the file
                 # matches any entry
                 if change_type == 1:
                     for entry in self.usrfs_entries:
@@ -406,7 +431,7 @@ class Project:
                             new_files.append(file)
                             self.usrfs_files.append(file)
                             break
-                
+
                 # for existing files check if path is in usrfs_files
                 fsfile = find_usrfs_file_by_path(self.usrfs_files, path)
                 if fsfile is None:
@@ -933,5 +958,21 @@ def download_tools():
 
     print("Tools downloaded and extracted to %s" % dest_dir)
 
+def attach_terminal():
+    """Attach a terminal to the board"""
+    terminal = Terminal(args.port, args.baud)
+    input()
+    terminal.close()
+
+def cleanup_board():
+    """Cleanup /usr filesystem on the board"""
+    terminal = Terminal(args.port, args.baud)
+    terminal.ensure_ready()
+    fops = TerminalFileOps(terminal)
+    hprint("Deleting all files in /usr on the board...")
+    fops.delete_all_usr_files()
+    terminal.soft_reset()
+    time.sleep(1)
+    terminal.close()
 
 main()
