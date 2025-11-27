@@ -991,9 +991,36 @@ def attach_terminal():
         import msvcrt
         
         def read_keyboard():
-            """Read keyboard input on Windows"""
+            """Read keyboard input on Windows, handling special keys"""
             if msvcrt.kbhit():
                 ch = msvcrt.getch()
+                
+                # Handle special keys (arrow keys, etc.)
+                if ch in (b'\x00', b'\xe0'):
+                    # Special key prefix - wait briefly for the actual key code
+                    time.sleep(0.001)  # 1ms wait
+                    if msvcrt.kbhit():
+                        key_code = msvcrt.getch()
+                        
+                        # Map Windows key codes to VT100 escape sequences
+                        key_map = {
+                            b'H': b'\x1b[A',  # Up arrow
+                            b'P': b'\x1b[B',  # Down arrow
+                            b'M': b'\x1b[C',  # Right arrow
+                            b'K': b'\x1b[D',  # Left arrow
+                            b'G': b'\x1b[H',  # Home
+                            b'O': b'\x1b[F',  # End
+                            b'S': b'\x1b[3~', # Delete
+                        }
+                        mapped = key_map.get(key_code)
+                        if mapped:
+                            return mapped
+                        # For unmapped special keys, ignore them
+                        return None
+                    else:
+                        # No second byte received, ignore the prefix
+                        return None
+                
                 return ch
             return None
     else:
@@ -1020,6 +1047,10 @@ def attach_terminal():
         while True:
             ch = read_keyboard()
             if ch is not None:
+                # Debug: show what we're sending for arrow keys
+                if args.verbose and ch.startswith(b'\x1b'):
+                    print(f"\r[Sending escape sequence: {ch!r}]", end='', flush=True)
+                
                 # Send character to device
                 terminal._ser.write(ch)
             else:
