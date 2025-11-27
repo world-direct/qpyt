@@ -959,9 +959,83 @@ def download_tools():
 
 def attach_terminal():
     """Attach a terminal to the board"""
+    import signal
+    import select
+    
     terminal = Terminal(args.port, args.baud)
-    input()
-    terminal.close()
+    
+    # Track Ctrl+C presses for exit
+    last_interrupt = [0.0]
+    
+    def handle_interrupt(sig, frame):
+        """Handle Ctrl+C: first time sends to device, second time exits"""
+        current_time = time.time()
+        
+        if current_time - last_interrupt[0] < 1.0:
+            # Second Ctrl+C within 1 second - exit
+            print("\n\nDetaching from terminal...")
+            terminal.close()
+            sys.exit(0)
+        else:
+            # First Ctrl+C - send to device
+            terminal._ser.write(b'\x03')
+            print("\r^C (press Ctrl+C again within 1s to detach)", end='', flush=True)
+            last_interrupt[0] = current_time
+    
+    # Install signal handler
+    original_handler = signal.signal(signal.SIGINT, handle_interrupt)
+    
+    # Setup for reading keyboard input
+    if sys.platform == 'win32':
+        # Windows - use msvcrt
+        import msvcrt
+        
+        def read_keyboard():
+            """Read keyboard input on Windows"""
+            if msvcrt.kbhit():
+                ch = msvcrt.getch()
+                return ch
+            return None
+    else:
+        # Unix-like systems - use termios for raw mode
+        import termios
+        import tty
+        
+        old_settings = termios.tcgetattr(sys.stdin)
+        tty.setraw(sys.stdin.fileno())
+        
+        def read_keyboard():
+            """Read keyboard input on Unix"""
+            if select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1)
+                return ch.encode()
+            return None
+    
+    try:
+        print("Attached to terminal. Type commands and press Enter.")
+        print("Press Ctrl+C twice (within 1s) to exit.")
+        print("-" * 60)
+        
+        # Input loop - read keyboard and send to serial
+        while True:
+            ch = read_keyboard()
+            if ch is not None:
+                # Send character to device
+                terminal._ser.write(ch)
+            else:
+                # Small delay to prevent CPU spinning
+                time.sleep(0.01)
+            
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Restore terminal settings on Unix
+        if sys.platform != 'win32':
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        
+        # Restore original signal handler
+        signal.signal(signal.SIGINT, original_handler)
+        terminal.close()
 
 def cleanup_board():
     """Cleanup /usr filesystem on the board"""
