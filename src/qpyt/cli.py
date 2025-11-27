@@ -1139,164 +1139,167 @@ def cleanup_board():
     terminal.close()
 
 def start_port_server(listen_port:int):
-    # https://github.com/pyserial/pyserial/blob/master/examples/tcp_serial_redirect.py
-    
-    import serial
+    """Start a RFC2217 serial port server to share the device over network"""
+
+    # this is adapted from the rfc2217_server.py example in pyserial#
+    # https://github.com/pyserial/pyserial/blob/master/examples/rfc2217_server.py
+    #
+    # redirect data from a TCP/IP connection to a serial port and vice versa
+    # using RFC 2217
+    #
+    # (C) 2009-2015 Chris Liechti <cliechti@gmx.net>
+    #
+    # SPDX-License-Identifier:    BSD-3-Clause
+
+    port = Terminal.find_serial_port(args.port)
+    print(f"Starting RFC2217 server on port {listen_port}, forwarding to {port}")
+
+
+    import logging
     import socket
-    import serial.threaded
+    import sys
+    import time
+    import threading
+    import serial
+    import serial.rfc2217
 
-    class SerialToNet(serial.threaded.Protocol):
-        """serial->socket"""
 
-        def __init__(self):
-            self.socket = None
+    class Redirector(object):
+        def __init__(self, serial_instance, socket, debug=False):
+            self.serial = serial_instance
+            self.socket = socket
+            self._write_lock = threading.Lock()
+            self.rfc2217 = serial.rfc2217.PortManager(
+                self.serial,
+                self,
+                logger=logging.getLogger('rfc2217.server') if debug else None)
+            self.log = logging.getLogger('redirector')
 
-        def __call__(self):
-            return self
+        def statusline_poller(self):
+            self.log.debug('status line poll thread started')
+            while self.alive:
+                time.sleep(1)
+                self.rfc2217.check_modem_lines()
+            self.log.debug('status line poll thread terminated')
 
-        def data_received(self, data):
-            if self.socket is not None:
+        def shortcircuit(self):
+            """connect the serial port to the TCP port by copying everything
+            from one side to the other"""
+            self.alive = True
+            self.thread_read = threading.Thread(target=self.reader)
+            self.thread_read.daemon = True
+            self.thread_read.name = 'serial->socket'
+            self.thread_read.start()
+            self.thread_poll = threading.Thread(target=self.statusline_poller)
+            self.thread_poll.daemon = True
+            self.thread_poll.name = 'status line poll'
+            self.thread_poll.start()
+            self.writer()
+
+        def reader(self):
+            """loop forever and copy serial->socket"""
+            self.log.debug('reader thread started')
+            while self.alive:
+                try:
+                    data = self.serial.read(self.serial.in_waiting or 1)
+                    if data:
+                        # escape outgoing data when needed (Telnet IAC (0xff) character)
+                        self.write(b''.join(self.rfc2217.escape(data)))
+                except socket.error as msg:
+                    self.log.error('{}'.format(msg))
+                    # probably got disconnected
+                    break
+            self.alive = False
+            self.log.debug('reader thread terminated')
+
+        def write(self, data):
+            """thread safe socket write with no data escaping. used to send telnet stuff"""
+            with self._write_lock:
                 self.socket.sendall(data)
 
+        def writer(self):
+            """loop forever and copy socket->serial"""
+            while self.alive:
+                try:
+                    data = self.socket.recv(1024)
+                    if not data:
+                        break
+                    self.serial.write(b''.join(self.rfc2217.filter(data)))
+                except socket.error as msg:
+                    self.log.error('{}'.format(msg))
+                    # probably got disconnected
+                    break
+            self.stop()
+
+        def stop(self):
+            """Stop copying"""
+            self.log.debug('stopping')
+            if self.alive:
+                self.alive = False
+                self.thread_read.join()
+                self.thread_poll.join()
+
+    if verbose:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    logging.basicConfig(level=level)
+
+    #~ logging.getLogger('root').setLevel(logging.INFO)
+    logging.getLogger('rfc2217').setLevel(level)
 
     # connect to serial port
-    ser = serial.Serial()
-    ser.port = Terminal.find_serial_port(args.port)
-    ser.baudrate = args.baud
+    ser = serial.serial_for_url(port, do_not_open=True)
+    ser.timeout = 3     # required so that the reader thread can exit
+    # reset control line as no _remote_ "terminal" has been connected yet
+    ser.dtr = False
+    ser.rts = False
 
-    sys.stderr.write(
-        '--- TCP/IP to Serial redirect on {p.name}  {p.baudrate} ---\n'
-        '--- type Ctrl-C / BREAK to quit\n'.format(p=ser))
+    logging.info("RFC 2217 TCP/IP to Serial redirector - type Ctrl-C / BREAK to quit")
 
     try:
         ser.open()
     except serial.SerialException as e:
-        sys.stderr.write('Could not open serial port {}: {}\n'.format(ser.name, e))
+        logging.error("Could not open serial port {}: {}".format(ser.name, e))
         sys.exit(1)
 
-    ser_to_net = SerialToNet()
-    serial_worker = serial.threaded.ReaderThread(ser, ser_to_net)
-    serial_worker.start()
+    logging.info("Serving serial port: {}".format(ser.name))
+    settings = ser.get_settings()
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(('', listen_port))
+    srv.bind(('0.0.0.0', listen_port))
     srv.listen(1)
-
-    try:
-        intentional_exit = False
-        while True:
-            sys.stderr.write('Waiting for connection on {}...\n'.format(listen_port))
+    logging.info("TCP/IP port: {}".format(listen_port))
+    while True:
+        try:
             client_socket, addr = srv.accept()
-            sys.stderr.write('Connected by {}\n'.format(addr))
-            # More quickly detect bad clients who quit without closing the
-            # connection: After 1 second of idle, start sending TCP keep-alive
-            # packets every 1 second. If 3 consecutive keep-alive packets
-            # fail, assume the client is gone and close the connection.
-            try:
-                client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
-                client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 1)
-                client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
-                client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-            except AttributeError:
-                pass # XXX not available on windows
+            logging.info('Connected by {}:{}'.format(addr[0], addr[1]))
             client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            ser.rts = True
+            ser.dtr = True
+            # enter network <-> serial loop
+            r = Redirector(
+                ser,
+                client_socket,
+                verbose)
             try:
-                ser_to_net.socket = client_socket
-                # enter network <-> serial loop
-                while True:
-                    try:
-                        data = client_socket.recv(1024)
-                        if not data:
-                            break
-                        ser.write(data)                 # get a bunch of bytes and send them
-                    except socket.error as msg:
-                        if args.develop:
-                            raise
-                        sys.stderr.write('ERROR: {}\n'.format(msg))
-                        # probably got disconnected
-                        break
-            except KeyboardInterrupt:
-                intentional_exit = True
-                raise
-            except socket.error as msg:
-                if args.develop:
-                    raise
-                sys.stderr.write('ERROR: {}\n'.format(msg))
+                r.shortcircuit()
             finally:
-                ser_to_net.socket = None
-                sys.stderr.write('Disconnected\n')
+                logging.info('Disconnected')
+                r.stop()
                 client_socket.close()
-                if not intentional_exit:
-                    time.sleep(5)  # intentional delay on reconnection as client
-    except KeyboardInterrupt:
-        pass
+                ser.dtr = False
+                ser.rts = False
+                # Restore port settings (may have been changed by RFC 2217
+                # capable client)
+                ser.apply_settings(settings)
+        except KeyboardInterrupt:
+            sys.stdout.write('\n')
+            break
+        except socket.error as msg:
+            logging.error(str(msg))
 
-    sys.stderr.write('\n--- exit ---\n')
-    serial_worker.stop()
-    # import socket
-
-    # HOST = '0.0.0.0'  # Listen on all interfaces
-    # PORT = listen_port
-
-    # # Open serial port
-    # terminal = Terminal(args.port, args.baud)
-    # terminal.enable_print = True  # Disable terminal's stdout printing
-    
-    # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    #     s.bind((HOST, PORT))
-    #     s.listen()
-    #     s.settimeout(1.0)  # Set 1 second timeout to allow checking for Ctrl+C
-        
-    #     # Get all local IP addresses
-    #     hostname = socket.gethostname()
-    #     local_ips = socket.getaddrinfo(hostname, None, socket.AF_INET)
-    #     ip_addresses = [ip[4][0] for ip in local_ips]
-        
-    #     print(f"Port server listening on port {PORT}")
-    #     print("Available on the following addresses:")
-    #     for ip in ip_addresses:
-    #         print(f"  - {ip}:{PORT}")
-    #     print("Press Ctrl+C to stop")
-    #     print()
-        
-    #     try:
-    #         while True:
-    #             try:
-    #                 conn, addr = s.accept()
-    #                 conn.settimeout(0.1)  # Non-blocking with short timeout
-    #                 print(f"Connected by {addr}")
-                    
-    #                 try:
-    #                     while True:
-    #                         # Read from TCP socket and send to serial
-    #                         try:
-    #                             data = conn.recv(1024)
-    #                             if not data:
-    #                                 break
-    #                             terminal._ser.write(data)
-    #                         except socket.timeout:
-    #                             pass
-                            
-    #                         # Read from serial and send to TCP socket
-    #                         if terminal._ser.in_waiting > 0:
-    #                             serial_data = terminal._ser.read(terminal._ser.in_waiting)
-    #                             conn.sendall(serial_data)
-                            
-    #                         # Small delay to prevent CPU spinning
-    #                         time.sleep(0.001)
-                            
-    #                 except (ConnectionResetError, BrokenPipeError):
-    #                     pass
-                    
-    #                 print(f"Connection closed by {addr}")
-                    
-    #             except socket.timeout:
-    #                 # Timeout allows the loop to check for KeyboardInterrupt
-    #                 continue
-    #     except KeyboardInterrupt:
-    #         print("\nServer stopped by user")
-    #     finally:
-    #         terminal.close()
-
+    logging.info('--- exit ---')
 main()
