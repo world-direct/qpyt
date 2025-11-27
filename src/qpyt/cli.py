@@ -68,6 +68,7 @@ def main():
     if args.command == "download-tools":
         download_tools()
 
+
 class Runtime:
     def __init__(self):
         self.qphy_dir = args.qphy_dir
@@ -110,266 +111,31 @@ class Runtime:
         else:
             raise Exception("Unsupported OS: %s" % os.name)
 
-    def to_native(self, path: str) -> str:
-        """Convert a path to native style (with os-specific slashes)"""
-        from pathlib import PureWindowsPath
+    def run_tool(self, command, mayfail=False):
+        if verbose:
+            print("   exec: %s" % " ".join(command))
+        import subprocess
 
-        if os.name == "nt":
-            return str(PureWindowsPath(path))
-        else:
-            return path
-
-
-runtime = Runtime()
-
-
-def vprint(*args, **kwargs):
-    """Prints arguments if verbose is enabled"""
-    if verbose:
-        print(*args, **kwargs)
-
-
-def hprint(*args, **kwargs):
-    """Prints a header always"""
-    # print_ansi("95")  # BRIGHT_CYAN
-    # print(*args, **kwargs)
-    # print_ansi("0")  # RESET
-    # print()
-
-    print("---------", *args, "------------")
-
-
-def print_ansi(sequence: str):
-    """Prints an ANSI escape sequence"""
-    print(f"\033[{sequence}m", end="")
-
-
-class ProjectUsrFsEntry:
-    def __init__(self, src: str, dest: str, glob: str, compile: bool):
-        self.src = src
-        self.dest = dest
-        self.glob = glob
-        self.compile = compile
-
-
-class ProjectUsrFsFile:
-    r"""Represents a file in the usr filesystem of the project
-
-    Attributes:
-    - entry: ProjectUsrFsEntry The entry this file belongs to
-    - source_path: str The local source path of the file like .\src\app\util.py
-    - build_path: str The build path of the tempoary usr filesystem .\build\temp\fs\usr\app\util.mpy
-    - target_path: str The target path of the file in the usr filesystem like /usr/app/util.mpy
-
-    """
-
-    def __init__(
-        self,
-        entry: ProjectUsrFsEntry,
-        source_path: str,
-        build_path: str,
-        target_path: str,
-    ):
-        self.entry = entry
-        self.source_path = source_path
-        self.build_path = build_path
-        self.target_path = target_path
-
-    def to_usr_fs(self, project: "Project"):
-        """Copy or compile the file to the temp usr fs directory"""
-        # build output path
-        dest_path = self.build_path
-        dest_dir = os.path.dirname(dest_path)
-
-        # create dest directory if not exist
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
-
-        # copy or compile file
-        if self.entry.compile and self.source_path.endswith(".py"):
-            # compile to .mpy
-            print(f"Compiling {self.source_path} to {dest_path}")
-            project.compile_mpy(self.source_path, dest_path)
-        else:
-            # copy file
-            print(f"Copying {self.source_path} to {dest_path}")
-            shutil.copy2(self.source_path, dest_path)
-
-
-class Project:
-    """Represents a Quectel project defined by project.yaml"""
-
-    APP_INFO_PATH = "/usr/app_info.json"
-
-    def __init__(self, path: str):
-        self.path = path
-        self.version = "develop"
-
-        self.dir = os.path.dirname(path)
-        self.usrfs_entries = []  # type: list[ProjectUsrFsEntry]
-        self.usrfs_files = []  # type: list[ProjectUsrFsFile]
-
-        # add the app_info.json to usrfs_sysfiles
-        self.usrfs_fileinfo = ProjectUsrFsFile(
-            entry=None,
-            source_path=None,
-            build_path=self.to_temp_usrfs(Project.APP_INFO_PATH),
-            target_path=Project.APP_INFO_PATH,
+        sub_p = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
+        stdout, stderr = sub_p.communicate()
 
-    def set_version(self, version: str):
-        """Set the project version"""
-        self.version = version
+        stdout = stdout.decode()
+        stderr = stderr.decode()
+        rc = sub_p.returncode
 
-    def build(self):
-        """Builds the project into the usrfs"""
-        import yaml
+        if verbose:
+            print("   returncode:", rc)
+            print("   stdout:", stdout)
+            print("   stderr:", stderr)
 
-        with open(self.path, "r") as f:
-            self.config = yaml.safe_load(f)
-
-        self.firmware_pac = self.config.get("firmware", "")
-
-        # delete all existing usrfs files
-        shutil.rmtree(runtime.usrfs_path, ignore_errors=True)
-
-        vprint("Reading project filesystem from", self.path)
-
-        for item in self.config["usrfs"]:
-            entry = ProjectUsrFsEntry(
-                src=item["src"],
-                dest=item["dest"],
-                glob=item.get("glob", "*"),
-                compile=item.get("compile", False),
+        if sub_p.returncode != 0 and not mayfail:
+            raise RuntimeError(
+                f"Command failed: {' '.join(command)}\nStdout: {stdout}\nStderr: {stderr}"
             )
 
-            self.usrfs_entries.append(entry)
-
-            # glob the source path
-            import glob
-
-            rootdir = os.path.join(self.dir, entry.src)
-            local_root_path = pathlib.Path(rootdir)
-            target_root_path = pathlib.PurePosixPath(entry.dest)
-
-            for res in glob.glob(entry.glob, root_dir=rootdir, recursive=True):
-                # res can be in windows style, so we convert it
-                res = self.to_posix(res)
-                local_path = pathlib.Path.joinpath(local_root_path, res)
-                target_path = pathlib.Path.joinpath(target_root_path, res)
-
-                # check compile to change extension
-                if entry.compile and local_path.suffix == ".py":
-                    target_path = target_path.with_suffix(".mpy")
-
-                fsfile = ProjectUsrFsFile(
-                    entry=entry,
-                    source_path=str(local_path),
-                    build_path=self.to_temp_usrfs(str(target_path)),
-                    target_path=self.to_board_fs(str(target_path)),
-                )
-
-                vprint("usrfs file:", fsfile.source_path, "->", fsfile.target_path)
-
-                self.usrfs_files.append(fsfile)
-
-        hprint("Building /usr filesystem into", runtime.usrfs_path)
-
-        file_list = []  # type: list[dict]
-        for file in self.usrfs_files:
-            file.to_usr_fs(self)
-            file_list.append(
-                {
-                    "path": self.to_board_fs(file.target_path),
-                    "size": os.path.getsize(file.build_path),
-                    "integrity": create_integrity_hash(file.build_path),
-                }
-            )
-
-        # write file list to output_dir/app_info.json
-        print("Generating app_info.json")
-        import json
-
-        app_info_json_path = os.path.join(runtime.usrfs_path, "usr", "app_info.json")
-        with open(app_info_json_path, "w") as f:
-            app_info = {"version": self.version, "files": file_list}
-            json.dump(app_info, f, indent=2)
-            f.flush()
-
-    def watch(self, terminal: "Terminal", fops: "TerminalFileOps"):
-        """Watch source directory for changes and deploy to the board"""
-
-        import watchfiles
-        for changes in watchfiles.watch(self.dir):
-
-            changed_files = [] # type: list[ProjectUsrFsFile]
-            new_files = [] # type: list[ProjectUsrFsFile]
-            deleted_files = [] # type: list[ProjectUsrFsFile]
-
-            # 'changes' is a set of all files that changed
-            # This waits briefly and consolidates multiple changes
-            for change_type, path in changes:
-                # change-type: 1: added, 2: modified, 3: deleted
-                # check if path is in usrfs_files
-                rel_path = os.path.relpath(path, self.dir)
-                for fsfile in self.usrfs_files:
-                    fs_rel_path = os.path.relpath(fsfile.source_path, self.dir)
-                    if fs_rel_path == rel_path:
-                            vprint(f"Source change: {rel_path} (change type: {change_type})")
-
-                            if change_type == 2:
-                                changed_files.append(fsfile)
-
-                            elif change_type == 3:
-                                deleted_files.append(fsfile)
-        
-            # check if there are any changes
-            if not changed_files and not deleted_files:
-                continue
-            
-            terminal.interrupt()
-            # process changed files
-            for fsfile in changed_files:
-                fsfile.to_usr_fs(self)
-                fops.cp(fsfile.build_path, fsfile.target_path)
-
-            terminal.soft_reset()
-
-
-    def deploy_to_board(self, fops: "TerminalFileOps"):
-        """Deploy the current usrfs files to the board using the given TerminalFileOps"""
-
-        hprint("Deploying files to board...")
-        board_files = fops.lsusr()
-        project_files = self.usrfs_files
-        board_files_dict = {bf.path: bf for bf in board_files}
-
-        # get all files that exist on the board and the project, but have a different size
-        files2cp = []
-        for pf in project_files + [self.usrfs_fileinfo]:
-            bf = board_files_dict.get(pf.target_path)
-            if bf is not None:
-                if bf.size != os.path.getsize(pf.build_path):
-                    print(
-                        f"File modified: {pf.target_path} (board size: {bf.size}, project size: {os.path.getsize(pf.build_path)})"
-                    )
-                    files2cp.append(pf)
-            else:
-                print(f"File added: {pf.target_path}")
-                files2cp.append(pf)
-
-        # copy files
-        for pf in files2cp:
-            local = pf.build_path
-            remote = pf.target_path
-
-            # get the directory of the remote file+
-            remote_dir = os.path.dirname(remote)
-            fops.ensure_dir(remote_dir)
-
-            # copy file
-            print(f"Copying file to board: {local} -> {remote}")
-            fops.cp(local, remote)
+        return rc, stdout, stderr
 
     def to_posix(self, path: str) -> str:
         """Convert a path to POSIX style (with forward slashes)"""
@@ -408,51 +174,310 @@ class Project:
 
     def compile_mpy(self, source: str, dest: str):
         """Compile a .py file to .mpy using mpy-cross"""
-        run_tool([runtime.mpy_cross, "-o", dest, "-mno-unicode", source])
+        runtime.run_tool([runtime.mpy_cross, "-o", dest, "-mno-unicode", source])
+
+    def create_integrity_hash(self, file_path):
+        import base64
+        import hashlib
+
+        hash = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            while chunk := f.read(8192):
+                hash.update(chunk)
+        # base64 encode the hash
+        base64_hash = base64.b64encode(hash.digest()).decode()
+        return hash.name + "-" + base64_hash
 
 
-def run_tool(command, mayfail=False):
+runtime = Runtime()
+
+
+def vprint(*args, **kwargs):
+    """Prints arguments if verbose is enabled"""
     if verbose:
-        print("   exec: %s" % " ".join(command))
-    import subprocess
+        print(*args, **kwargs)
 
-    sub_p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = sub_p.communicate()
 
-    stdout = stdout.decode()
-    stderr = stderr.decode()
-    rc = sub_p.returncode
+def hprint(*args, **kwargs):
+    """Prints a header always"""
+    # print_ansi("95")  # BRIGHT_CYAN
+    # print(*args, **kwargs)
+    # print_ansi("0")  # RESET
+    # print()
 
-    if verbose:
-        print("   returncode:", rc)
-        print("   stdout:", stdout)
-        print("   stderr:", stderr)
+    print("---------", *args, "------------")
 
-    if sub_p.returncode != 0 and not mayfail:
-        raise RuntimeError(
-            f"Command failed: {' '.join(command)}\nStdout: {stdout}\nStderr: {stderr}"
+
+def print_ansi(sequence: str):
+    """Prints an ANSI escape sequence"""
+    print(f"\033[{sequence}m", end="")
+
+
+class ProjectUsrFsEntry:
+    def __init__(self, src: str, dest: str, glob: str, compile: bool):
+        self.src = src
+        self.dest = dest
+        self.glob = glob
+        self.compile = compile
+
+
+    def glob_files(self, project: "Project"):
+        # glob the source path
+        import glob
+
+        rootdir = os.path.join(project.dir, self.src)
+        local_root_path = pathlib.Path(rootdir)
+        target_root_path = pathlib.PurePosixPath(self.dest)
+
+        files = [] # type: list["ProjectUsrFsFile"]
+        for res in glob.glob(self.glob, root_dir=rootdir, recursive=True):
+            # res can be in windows style, so we convert it
+            res = runtime.to_posix(res)
+            local_path = pathlib.Path.joinpath(local_root_path, res)
+            target_path = pathlib.Path.joinpath(target_root_path, res)
+
+            # check compile to change extension
+            if self.compile and local_path.suffix == ".py":
+                target_path = target_path.with_suffix(".mpy")
+
+            fsfile = ProjectUsrFsFile(
+                entry=self,
+                source_path=str(local_path),
+                build_path=runtime.to_temp_usrfs(str(target_path)),
+                target_path=runtime.to_board_fs(str(target_path)),
+            )
+
+            vprint("usrfs file:", fsfile.source_path, "->", fsfile.target_path)
+
+            files.append(fsfile)
+
+        return files
+
+class ProjectUsrFsFile:
+    r"""Represents a file in the usr filesystem of the project
+
+    Attributes:
+    - entry: ProjectUsrFsEntry The entry this file belongs to
+    - source_path: str The local source path of the file like .\src\app\util.py
+    - build_path: str The build path of the tempoary usr filesystem .\build\temp\fs\usr\app\util.mpy
+    - target_path: str The target path of the file in the usr filesystem like /usr/app/util.mpy
+
+    """
+
+    def __init__(
+        self,
+        entry: ProjectUsrFsEntry,
+        source_path: str,
+        build_path: str,
+        target_path: str,
+    ):
+        self.entry = entry
+        self.source_path = source_path
+        self.build_path = build_path
+        self.target_path = target_path
+
+    def to_usr_fs(self, project: "Project"):
+        """Copy or compile the file to the temp usr fs directory"""
+        # build output path
+        dest_path = self.build_path
+        dest_dir = os.path.dirname(dest_path)
+
+        # create dest directory if not exist
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+
+        # copy or compile file
+        if self.entry.compile and self.source_path.endswith(".py"):
+            # compile to .mpy
+            print(f"Compiling {self.source_path} to {dest_path}")
+            runtime.compile_mpy(self.source_path, dest_path)
+        else:
+            # copy file
+            print(f"Copying {self.source_path} to {dest_path}")
+            shutil.copy2(self.source_path, dest_path)
+
+
+class Project:
+    """Represents a Quectel project defined by project.yaml"""
+
+    APP_INFO_PATH = "/usr/app_info.json"
+
+    def __init__(self, path: str):
+        self.path = path
+        self.version = "develop"
+
+        self.dir = os.path.dirname(path)
+        self.usrfs_entries = []  # type: list[ProjectUsrFsEntry]
+        self.usrfs_files = []  # type: list[ProjectUsrFsFile]
+
+        # add the app_info.json to usrfs_sysfiles
+        self.usrfs_fileinfo = ProjectUsrFsFile(
+            entry=None,
+            source_path=None,
+            build_path=runtime.to_temp_usrfs(Project.APP_INFO_PATH),
+            target_path=Project.APP_INFO_PATH,
         )
 
-    return rc, stdout, stderr
+    def set_version(self, version: str):
+        """Set the project version"""
+        self.version = version
 
+    def build(self):
+        """Builds the project into the usrfs"""
+        import yaml
 
-def find_serial_port(port: str):
-    """Try to find the serial port by name or description"""
-    import serial.tools.list_ports
+        with open(self.path, "r") as f:
+            self.config = yaml.safe_load(f)
 
-    ports = list(serial.tools.list_ports.comports())
-    for p in ports:
-        if p.name == port:
-            # port port is specifed directly, use it
-            print("Using specified port:", p.name)
-            return p.name
+        self.firmware_pac = self.config.get("firmware", "")
 
-        if p.description.find(port) != -1:
-            # found matching port
-            print(f"Auto-detected device on port: {p.name}")
-            return p.name
+        # delete all existing usrfs files
+        shutil.rmtree(runtime.usrfs_path, ignore_errors=True)
 
-    raise RuntimeError(f"Could not find serial port matching: {port}")
+        vprint("Reading project filesystem from", self.path)
+
+        for item in self.config["usrfs"]:
+            entry = ProjectUsrFsEntry(
+                src=item["src"],
+                dest=item["dest"],
+                glob=item.get("glob", "*"),
+                compile=item.get("compile", False),
+            )
+
+            self.usrfs_entries.append(entry)
+            files = entry.glob_files(self)
+            self.usrfs_files.extend(files)
+
+        hprint("Building /usr filesystem into", runtime.usrfs_path)
+
+        file_list = []  # type: list[dict]
+        for file in self.usrfs_files:
+            file.to_usr_fs(self)
+            file_list.append(
+                {
+                    "path": runtime.to_board_fs(file.target_path),
+                    "size": os.path.getsize(file.build_path),
+                    "integrity": runtime.create_integrity_hash(file.build_path),
+                }
+            )
+
+        # write file list to output_dir/app_info.json
+        print("Generating app_info.json")
+        import json
+
+        app_info_json_path = os.path.join(runtime.usrfs_path, "usr", "app_info.json")
+        with open(app_info_json_path, "w") as f:
+            app_info = {"version": self.version, "files": file_list}
+            json.dump(app_info, f, indent=2)
+            f.flush()
+
+    def watch(self, terminal: "Terminal", fops: "TerminalFileOps"):
+        """Watch source directory for changes and deploy to the board"""
+
+        import watchfiles
+
+        def find_usrfs_file_by_path(files: list[ProjectUsrFsFile], path: str):
+            rel_path = os.path.relpath(path, self.dir)
+            for fsfile in files:
+                fs_rel_path = os.path.relpath(fsfile.source_path, self.dir)
+                if fs_rel_path == rel_path:
+                    return fsfile
+                
+            return None
+
+        for changes in watchfiles.watch(self.dir):
+            changed_files = []  # type: list[ProjectUsrFsFile]
+            new_files = []  # type: list[ProjectUsrFsFile]
+            deleted_files = []  # type: list[ProjectUsrFsFile]
+
+            # 'changes' is a set of all files that changed
+            # This waits briefly and consolidates multiple changes
+            for change_type, path in changes:
+                # change-type: 1: added, 2: modified, 3: deleted
+
+                # for new files glob all entries again to check if the file 
+                # matches any entry
+                if change_type == 1:
+                    for entry in self.usrfs_entries:
+                        files = entry.glob_files(self)
+                        file = find_usrfs_file_by_path(files, path)
+
+                        if file is not None:
+                            new_files.append(file)
+                            self.usrfs_files.append(file)
+                            break
+                
+                # for existing files check if path is in usrfs_files
+                fsfile = find_usrfs_file_by_path(self.usrfs_files, path)
+                if fsfile is None:
+                    # change not in project usrfs, skip
+                    continue
+
+                if change_type == 2:
+                    changed_files.append(fsfile)
+
+                elif change_type == 3:
+                    self.usrfs_files.remove(fsfile)
+                    deleted_files.append(fsfile)
+
+            # check if there are any changes
+            if not changed_files and not deleted_files and not new_files:
+                continue
+
+            terminal.ensure_ready()
+
+            # process changed files
+            for fsfile in changed_files:
+                fsfile.to_usr_fs(self)
+                fops.cp(fsfile.build_path, fsfile.target_path)
+
+            # process deleted files
+            for fsfile in deleted_files:
+                print(f"Deleting file on board: {fsfile.target_path}")
+                fops.remove(fsfile.target_path)
+
+            # process new files
+            for fsfile in new_files:
+                print(f"Adding new file on board: {fsfile.target_path}")
+                fsfile.to_usr_fs(self)
+                fops.cp(fsfile.build_path, fsfile.target_path)
+
+            terminal.soft_reset()
+
+    def deploy_to_board(self, fops: "TerminalFileOps"):
+        """Deploy the current usrfs files to the board using the given TerminalFileOps"""
+
+        hprint("Deploying files to board...")
+        board_files = fops.lsusr()
+        project_files = self.usrfs_files
+        board_files_dict = {bf.path: bf for bf in board_files}
+
+        # get all files that exist on the board and the project, but have a different size
+        files2cp = []
+        for pf in project_files + [self.usrfs_fileinfo]:
+            bf = board_files_dict.get(pf.target_path)
+            if bf is not None:
+                if bf.size != os.path.getsize(pf.build_path):
+                    print(
+                        f"File modified: {pf.target_path} (board size: {bf.size}, project size: {os.path.getsize(pf.build_path)})"
+                    )
+                    files2cp.append(pf)
+            else:
+                print(f"File added: {pf.target_path}")
+                files2cp.append(pf)
+
+        # copy files
+        for pf in files2cp:
+            local = pf.build_path
+            remote = pf.target_path
+
+            # get the directory of the remote file+
+            remote_dir = os.path.dirname(remote)
+            fops.ensure_dir(remote_dir)
+
+            # copy file
+            print(f"Copying file to board: {local} -> {remote}")
+            fops.cp(local, remote)
 
 
 class Terminal:
@@ -461,7 +486,7 @@ class Terminal:
     def __init__(self, port, baud):
         import serial
 
-        port = find_serial_port(port)
+        port = Terminal.find_serial_port(port)
         try:
             self._ser = serial.Serial(port, baud)
         except Exception as e:
@@ -472,6 +497,7 @@ class Terminal:
         self.command_event = None
         self.command_output = None
         self.enable_print = True
+        self.is_busy = True
         self._reader_thread = threading.Thread(target=self.serial_reader, daemon=True)
         self._reader_thread.start()
 
@@ -535,6 +561,13 @@ class Terminal:
         """Soft reboot the board"""
         self._ser.write(b"\x04")  # Send Ctrl+D
         self._ser.write(b"\r\n")
+        self.is_busy = True
+
+    def ensure_ready(self):
+        """Ensure that the board is in REPL mode"""
+        if self.is_busy:
+            self.interrupt()
+            self.is_busy = False
 
     def interrupt(self, attempts=3):
         """
@@ -554,6 +587,25 @@ class Terminal:
 
         if args.verbose:
             print("Program interrupted, returned to REPL")
+
+    @staticmethod
+    def find_serial_port(port: str):
+        """Try to find the serial port by name or description"""
+        import serial.tools.list_ports
+
+        ports = list(serial.tools.list_ports.comports())
+        for p in ports:
+            if p.name == port:
+                # port port is specifed directly, use it
+                print("Using specified port:", p.name)
+                return p.name
+
+            if p.description.find(port) != -1:
+                # found matching port
+                print(f"Auto-detected device on port: {p.name}")
+                return p.name
+
+        raise RuntimeError(f"Could not find serial port matching: {port}")
 
 
 class BoardFile:
@@ -671,12 +723,13 @@ def watch():
     project.build()
 
     terminal = Terminal(args.port, args.baud)
-    terminal.interrupt()
+    terminal.ensure_ready()
     fops = TerminalFileOps(terminal)
     project.deploy_to_board(fops)
     hprint("Resetting device and watch for changes...")
     terminal.soft_reset()
     project.watch(terminal, fops)
+
 
 def build_firmware(output_dir: str = None):
     """Build the firmware package for flashing / app_fota"""
@@ -707,12 +760,15 @@ def build_firmware(output_dir: str = None):
                 relative_path = os.path.relpath(file_path, runtime.usrfs_path)
                 zipf.write(file_path, relative_path)
 
-    print("Created usr.zip for app fota: %s" % create_integrity_hash(usr_fs_zip_path))
+    print(
+        "Created usr.zip for app fota: %s"
+        % runtime.create_integrity_hash(usr_fs_zip_path)
+    )
 
     # create the customer_fs.bin using mklfs
     hprint("create customer_fs.bin using mklfs")
     customer_fs_bin = os.path.join(runtime.temp_dir, "customer_fs.bin")
-    run_tool(
+    runtime.run_tool(
         [
             runtime.mklfs,
             "-c",
@@ -735,7 +791,7 @@ def build_firmware(output_dir: str = None):
     customer_backup_fs_bin = os.path.join(runtime.temp_dir, "customer_backup_fs.bin")
     bak_output_dir = os.path.join(runtime.temp_dir, "bak")
     os.makedirs(bak_output_dir, exist_ok=True)
-    run_tool(
+    runtime.run_tool(
         [
             runtime.mklfs,
             "-c",
@@ -758,7 +814,7 @@ def build_firmware(output_dir: str = None):
     # C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\exes\Unisoc\pacgen.exe cfg-init --pname UIX8910_MODEM --palias APPIMG --pversion "8910 MODULE" --version BP_R1.0.0 --flashtype 1 cfg-host-fdl -a 0x8000c0 -s 0xff40 -p C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\exes\Unisoc\images\EC200UCNAA\fdl1.img cfg-fdl2 -a 0x810000 -s 0x30000 -p C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\exes\Unisoc\images\EC200UCNAA\fdl2.img cfg-image -i PY_FS_U -a 0x604e0000 -s 0x60000 -p C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\images\customer_fs.bin cfg-image -i PY_FS_B -a 0x60540000 -s 0x20000 -p C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\images\customer_backup_fs.bin pac-gen C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\images\customer_fs.pac[2025-10-30 12:14:54]
     app_pac = os.path.join(runtime.temp_dir, "app.pac")
     # fmt: off
-    run_tool(
+    runtime.run_tool(
         [
             runtime.pacgen,
             "cfg-init", "--pname", "UIX8910_MODEM", "--palias", "APPIMG", "--pversion", "8910 MODULE", "--version", "BP_R1.0.0", "--flashtype", "1",
@@ -775,7 +831,7 @@ def build_firmware(output_dir: str = None):
     hprint("merge final .pac using dttools pacmerge")
     # "C:\Users\guenter.prossliner\Downloads\QPY_OCPU_EG915U_EUAB_FW\QPY_OCPU_V0006_EG915U_EUAB_FW\EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300\8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge.pac" C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\images\customer_fs.pac "C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\outFW\8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge_20251030-1214.pac"[2025-10-30 12:14:56]
     output_pac = os.path.join(output_dir, "firmware.pac")
-    run_tool(
+    runtime.run_tool(
         [
             runtime.dtools,
             "pacmerge",
@@ -790,7 +846,7 @@ def build_firmware(output_dir: str = None):
     )
 
     print("Firmware build completed. Output pac file: %s" % output_pac)
-    print("Hash of output pac: %s" % create_integrity_hash(output_pac))
+    print("Hash of output pac: %s" % runtime.create_integrity_hash(output_pac))
 
 
 def download_tools():
@@ -876,19 +932,6 @@ def download_tools():
     shutil.rmtree(extracted_subdir)
 
     print("Tools downloaded and extracted to %s" % dest_dir)
-
-
-def create_integrity_hash(file_path):
-    import base64
-    import hashlib
-
-    hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while chunk := f.read(8192):
-            hash.update(chunk)
-    # base64 encode the hash
-    base64_hash = base64.b64encode(hash.digest()).decode()
-    return hash.name + "-" + base64_hash
 
 
 main()
