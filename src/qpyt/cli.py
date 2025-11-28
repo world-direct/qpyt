@@ -635,7 +635,9 @@ class Terminal:
         self.command_output = StringIO() if data is None else data
 
         self._ser.write(command.encode("utf-8") + b"\r\n")
-        self.command_event.wait(timeout)
+        if not self.command_event.wait(timeout):
+            raise TimeoutError(f"Timeout waiting for command response: {command}")
+        
         self.enable_print = True
 
         response = self.command_output.getvalue()
