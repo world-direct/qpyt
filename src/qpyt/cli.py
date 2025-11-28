@@ -14,10 +14,9 @@ if sys.version_info < (3, 11):
 
 # check for required packages
 try:
-    import serial
-    import serial.tools.list_ports
-    import yaml
-    import watchfiles
+    import serial  # noqa: F401
+    import watchfiles  # noqa: F401
+    import yaml  # noqa: F401
 except ImportError as e:
     print("Missing required package:", e.name)
     print("Please install the required packages with:")
@@ -243,6 +242,7 @@ class Runtime:
     def compile_mpy(self, source: str, dest: str):
         """Compile a .py file to .mpy using mpy-cross"""
         import mpy_cross
+
         runtime.run_tool([mpy_cross.mpy_cross, "-o", dest, "-mno-unicode", source])
 
     def create_integrity_hash(self, file_path):
@@ -664,7 +664,7 @@ class Terminal:
         self._ser.write(command.encode("utf-8") + b"\r\n")
         if not self.command_event.wait(timeout):
             raise TimeoutError(f"Timeout waiting for command response: {command}")
-        
+
         self.enable_print = True
 
         response = self.command_output.getvalue()
@@ -1162,7 +1162,7 @@ def attach_terminal():
                 if ch == b"\x03":
                     handle_interrupt(None, None)
                     continue
-                
+
                 # Debug: show what we're sending for arrow keys
                 if args.verbose and ch.startswith(b"\x1b"):
                     print(f"\r[Sending escape sequence: {ch!r}]", end="", flush=True)
