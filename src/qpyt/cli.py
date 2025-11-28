@@ -1158,6 +1158,11 @@ def attach_terminal():
         while True:
             ch = read_keyboard()
             if ch is not None:
+                # Check for Ctrl+C (0x03) in raw mode
+                if ch == b"\x03":
+                    handle_interrupt(None, None)
+                    continue
+                
                 # Debug: show what we're sending for arrow keys
                 if args.verbose and ch.startswith(b"\x1b"):
                     print(f"\r[Sending escape sequence: {ch!r}]", end="", flush=True)
