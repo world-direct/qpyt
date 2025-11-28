@@ -93,11 +93,17 @@ portserver_parser = subparsers.add_parser(
 )
 
 portserver_parser.add_argument(
-    "--listen-port", type=int, help="Port to listen on for incoming TCP connections", default=15612
+    "--listen-port",
+    type=int,
+    help="Port to listen on for incoming TCP connections",
+    default=15612,
 )
 
 portserver_parser.add_argument(
-    "--listen-ip", type=str, help="IP address to listen on for incoming TCP connections", default="0.0.0.0"
+    "--listen-ip",
+    type=str,
+    help="IP address to listen on for incoming TCP connections",
+    default="0.0.0.0",
 )
 
 args = parser.parse_args()
@@ -129,6 +135,7 @@ def main():
 
     if args.command == "port-server":
         start_port_server(args.listen_ip, args.listen_port)
+
 
 class Runtime:
     def __init__(self):
@@ -351,25 +358,40 @@ class ProjectUsrFsFile:
         # copy or compile file
         if self.entry.compile and self.source_path.endswith(".py"):
             # compile to .mpy
-            if os.path.exists(dest_path) and os.path.getmtime(self.source_path) == os.path.getmtime(dest_path):
-                vprint(f"Skipping compile of {self.source_path} to {dest_path} because modification time is the same")
+            if os.path.exists(dest_path) and os.path.getmtime(
+                self.source_path
+            ) == os.path.getmtime(dest_path):
+                vprint(
+                    f"Skipping compile of {self.source_path} to {dest_path} because modification time is the same"
+                )
             else:
                 print(f"Compiling {self.source_path} to {dest_path}")
                 runtime.compile_mpy(self.source_path, dest_path)
 
                 # set modification time of dest to source
-                os.utime(dest_path, (os.path.getatime(self.source_path), os.path.getmtime(self.source_path)))
+                os.utime(
+                    dest_path,
+                    (
+                        os.path.getatime(self.source_path),
+                        os.path.getmtime(self.source_path),
+                    ),
+                )
         else:
             # copy file if modification time is different
-            if os.path.exists(dest_path) and os.path.getmtime(self.source_path) == os.path.getmtime(dest_path):
-                vprint(f"Skipping copy of {self.source_path} to {dest_path} because modification time is the same")
+            if os.path.exists(dest_path) and os.path.getmtime(
+                self.source_path
+            ) == os.path.getmtime(dest_path):
+                vprint(
+                    f"Skipping copy of {self.source_path} to {dest_path} because modification time is the same"
+                )
             else:
                 print(f"Copying {self.source_path} to {dest_path}")
                 shutil.copy2(self.source_path, dest_path)
 
+
 class ProjectUsrFs:
     def __init__(self):
-        self.files = [] # type: list[ProjectUsrFsFile]
+        self.files = []  # type: list[ProjectUsrFsFile]
 
         # add the app_info.json to usrfs_sysfiles
         self.fileinfo = ProjectUsrFsFile(
@@ -386,15 +408,15 @@ class ProjectUsrFs:
     def all_files(self) -> list["ProjectUsrFsFile"]:
         """Get all files including app_info.json"""
         return self.files + [self.fileinfo]
-    
+
     def remove(self, fsfile: "ProjectUsrFsFile"):
         """Remove a file from the usrfs"""
         self.files.remove(fsfile)
-    
+
     def usr_files(self) -> list["ProjectUsrFsFile"]:
         """Get all usr files without app_info.json"""
         return self.files
-    
+
     def build(self, project: "Project"):
         """Builds the usrfs into the temp directory including creating app_info.json"""
 
@@ -418,7 +440,8 @@ class ProjectUsrFs:
             app_info = {"version": project.version, "files": file_list}
             json.dump(app_info, f, indent=2)
             f.flush()
-    
+
+
 class Project:
     """Represents a Quectel project defined by project.yaml"""
 
@@ -517,7 +540,7 @@ class Project:
             # check if there are any changes
             if not changed_files and not deleted_files and not new_files:
                 continue
-            
+
             self.usrfs.build(self)
             terminal.ensure_ready()
 
@@ -550,7 +573,10 @@ class Project:
             bf = board_files_dict.get(pf.target_path)
             if bf is not None:
                 # currently we always assume app_info.json is modified, bc for edits the size will not change
-                if bf.size != os.path.getsize(pf.build_path) or pf.target_path == Project.APP_INFO_PATH:
+                if (
+                    bf.size != os.path.getsize(pf.build_path)
+                    or pf.target_path == Project.APP_INFO_PATH
+                ):
                     print(
                         f"File modified: {pf.target_path} (board size: {bf.size}, project size: {os.path.getsize(pf.build_path)})"
                     )
@@ -622,6 +648,7 @@ class Terminal:
             else:
                 # Small sleep to prevent CPU spinning
                 import time
+
                 time.sleep(0.01)
 
     def execute_command(self, command, data: StringIO = None, timeout=5.0):
@@ -689,7 +716,7 @@ class Terminal:
         if port.startswith("rfc2217://"):
             print("Using RFC2217 port:", port)
             return port
-        
+
         # check if it is just HOST:PORT
         if ":" in port and not port.startswith("/"):
             uri = "rfc2217://" + port
@@ -958,10 +985,10 @@ def build_firmware(output_dir: str = None):
 
 def download_tools():
     """Download required tools from Quectel"""
-    import shutil
     import os
-    import urllib.request
+    import shutil
     import tempfile
+    import urllib.request
 
     if os.name == "nt":
         url = "https://developer.quectel.com/en/wp-content/uploads/sites/2/2024/11/QPYcom_V3.9.0.zip"
@@ -1040,20 +1067,21 @@ def download_tools():
 
     print("Tools downloaded and extracted to %s" % dest_dir)
 
+
 def attach_terminal():
     """Attach a terminal to the board"""
-    import signal
     import select
-    
+    import signal
+
     terminal = Terminal(args.port, args.baud)
-    
+
     # Track Ctrl+C presses for exit
     last_interrupt = [0.0]
-    
+
     def handle_interrupt(sig, frame):
         """Handle Ctrl+C: first time sends to device, second time exits"""
         current_time = time.time()
-        
+
         if current_time - last_interrupt[0] < 1.0:
             # Second Ctrl+C within 1 second - exit
             print("\n\nDetaching from terminal...")
@@ -1061,39 +1089,39 @@ def attach_terminal():
             sys.exit(0)
         else:
             # First Ctrl+C - send to device
-            terminal._ser.write(b'\x03')
-            print("\r^C (press Ctrl+C again within 1s to detach)", end='', flush=True)
+            terminal._ser.write(b"\x03")
+            print("\r^C (press Ctrl+C again within 1s to detach)", end="", flush=True)
             last_interrupt[0] = current_time
-    
+
     # Install signal handler
     original_handler = signal.signal(signal.SIGINT, handle_interrupt)
-    
+
     # Setup for reading keyboard input
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         # Windows - use msvcrt
         import msvcrt
-        
+
         def read_keyboard():
             """Read keyboard input on Windows, handling special keys"""
             if msvcrt.kbhit():
                 ch = msvcrt.getch()
-                
+
                 # Handle special keys (arrow keys, etc.)
-                if ch in (b'\x00', b'\xe0'):
+                if ch in (b"\x00", b"\xe0"):
                     # Special key prefix - wait briefly for the actual key code
                     time.sleep(0.001)  # 1ms wait
                     if msvcrt.kbhit():
                         key_code = msvcrt.getch()
-                        
+
                         # Map Windows key codes to VT100 escape sequences
                         key_map = {
-                            b'H': b'\x1b[A',  # Up arrow
-                            b'P': b'\x1b[B',  # Down arrow
-                            b'M': b'\x1b[C',  # Right arrow
-                            b'K': b'\x1b[D',  # Left arrow
-                            b'G': b'\x1b[H',  # Home
-                            b'O': b'\x1b[F',  # End
-                            b'S': b'\x1b[3~', # Delete
+                            b"H": b"\x1b[A",  # Up arrow
+                            b"P": b"\x1b[B",  # Down arrow
+                            b"M": b"\x1b[C",  # Right arrow
+                            b"K": b"\x1b[D",  # Left arrow
+                            b"G": b"\x1b[H",  # Home
+                            b"O": b"\x1b[F",  # End
+                            b"S": b"\x1b[3~",  # Delete
                         }
                         mapped = key_map.get(key_code)
                         if mapped:
@@ -1103,53 +1131,54 @@ def attach_terminal():
                     else:
                         # No second byte received, ignore the prefix
                         return None
-                
+
                 return ch
             return None
     else:
         # Unix-like systems - use termios for raw mode
         import termios
         import tty
-        
+
         old_settings = termios.tcgetattr(sys.stdin)
         tty.setraw(sys.stdin.fileno())
-        
+
         def read_keyboard():
             """Read keyboard input on Unix"""
             if select.select([sys.stdin], [], [], 0)[0]:
                 ch = sys.stdin.read(1)
                 return ch.encode()
             return None
-    
+
     try:
         print("Attached to terminal. Type commands and press Enter.")
         print("Press Ctrl+C twice (within 1s) to exit.")
         print("-" * 60)
-        
+
         # Input loop - read keyboard and send to serial
         while True:
             ch = read_keyboard()
             if ch is not None:
                 # Debug: show what we're sending for arrow keys
-                if args.verbose and ch.startswith(b'\x1b'):
-                    print(f"\r[Sending escape sequence: {ch!r}]", end='', flush=True)
-                
+                if args.verbose and ch.startswith(b"\x1b"):
+                    print(f"\r[Sending escape sequence: {ch!r}]", end="", flush=True)
+
                 # Send character to device
                 terminal._ser.write(ch)
             else:
                 # Small delay to prevent CPU spinning
                 time.sleep(0.01)
-            
+
     except KeyboardInterrupt:
         pass
     finally:
         # Restore terminal settings on Unix
-        if sys.platform != 'win32':
+        if sys.platform != "win32":
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        
+
         # Restore original signal handler
         signal.signal(signal.SIGINT, original_handler)
         terminal.close()
+
 
 def cleanup_board():
     """Cleanup /usr filesystem on the board"""
@@ -1162,7 +1191,8 @@ def cleanup_board():
     time.sleep(1)
     terminal.close()
 
-def start_port_server(listen_ip:str, listen_port:int):
+
+def start_port_server(listen_ip: str, listen_port: int):
     """Start a RFC2217 serial port server to share the device over network"""
 
     # this is adapted from the rfc2217_server.py example in pyserial#
@@ -1178,15 +1208,14 @@ def start_port_server(listen_ip:str, listen_port:int):
     port = Terminal.find_serial_port(args.port)
     print(f"Starting RFC2217 server on port {listen_port}, forwarding to {port}")
 
-
     import logging
     import socket
     import sys
-    import time
     import threading
+    import time
+
     import serial
     import serial.rfc2217
-
 
     class Redirector(object):
         def __init__(self, serial_instance, socket, debug=False):
@@ -1196,15 +1225,16 @@ def start_port_server(listen_ip:str, listen_port:int):
             self.rfc2217 = serial.rfc2217.PortManager(
                 self.serial,
                 self,
-                logger=logging.getLogger('rfc2217.server') if debug else None)
-            self.log = logging.getLogger('redirector')
+                logger=logging.getLogger("rfc2217.server") if debug else None,
+            )
+            self.log = logging.getLogger("redirector")
 
         def statusline_poller(self):
-            self.log.debug('status line poll thread started')
+            self.log.debug("status line poll thread started")
             while self.alive:
                 time.sleep(1)
                 self.rfc2217.check_modem_lines()
-            self.log.debug('status line poll thread terminated')
+            self.log.debug("status line poll thread terminated")
 
         def shortcircuit(self):
             """connect the serial port to the TCP port by copying everything
@@ -1212,29 +1242,29 @@ def start_port_server(listen_ip:str, listen_port:int):
             self.alive = True
             self.thread_read = threading.Thread(target=self.reader)
             self.thread_read.daemon = True
-            self.thread_read.name = 'serial->socket'
+            self.thread_read.name = "serial->socket"
             self.thread_read.start()
             self.thread_poll = threading.Thread(target=self.statusline_poller)
             self.thread_poll.daemon = True
-            self.thread_poll.name = 'status line poll'
+            self.thread_poll.name = "status line poll"
             self.thread_poll.start()
             self.writer()
 
         def reader(self):
             """loop forever and copy serial->socket"""
-            self.log.debug('reader thread started')
+            self.log.debug("reader thread started")
             while self.alive:
                 try:
                     data = self.serial.read(self.serial.in_waiting or 1)
                     if data:
                         # escape outgoing data when needed (Telnet IAC (0xff) character)
-                        self.write(b''.join(self.rfc2217.escape(data)))
+                        self.write(b"".join(self.rfc2217.escape(data)))
                 except socket.error as msg:
-                    self.log.error('{}'.format(msg))
+                    self.log.error("{}".format(msg))
                     # probably got disconnected
                     break
             self.alive = False
-            self.log.debug('reader thread terminated')
+            self.log.debug("reader thread terminated")
 
         def write(self, data):
             """thread safe socket write with no data escaping. used to send telnet stuff"""
@@ -1248,16 +1278,16 @@ def start_port_server(listen_ip:str, listen_port:int):
                     data = self.socket.recv(1024)
                     if not data:
                         break
-                    self.serial.write(b''.join(self.rfc2217.filter(data)))
+                    self.serial.write(b"".join(self.rfc2217.filter(data)))
                 except socket.error as msg:
-                    self.log.error('{}'.format(msg))
+                    self.log.error("{}".format(msg))
                     # probably got disconnected
                     break
             self.stop()
 
         def stop(self):
             """Stop copying"""
-            self.log.debug('stopping')
+            self.log.debug("stopping")
             if self.alive:
                 self.alive = False
                 self.thread_read.join()
@@ -1270,12 +1300,12 @@ def start_port_server(listen_ip:str, listen_port:int):
 
     logging.basicConfig(level=level)
 
-    #~ logging.getLogger('root').setLevel(logging.INFO)
-    logging.getLogger('rfc2217').setLevel(level)
+    # ~ logging.getLogger('root').setLevel(logging.INFO)
+    logging.getLogger("rfc2217").setLevel(level)
 
     # connect to serial port
     ser = serial.serial_for_url(port, do_not_open=True)
-    ser.timeout = 3     # required so that the reader thread can exit
+    ser.timeout = 3  # required so that the reader thread can exit
     # reset control line as no _remote_ "terminal" has been connected yet
     ser.dtr = False
     ser.rts = False
@@ -1307,19 +1337,16 @@ def start_port_server(listen_ip:str, listen_port:int):
                 continue
 
             client_socket, addr = srv.accept()
-            logging.info('Connected by {}:{}'.format(addr[0], addr[1]))
+            logging.info("Connected by {}:{}".format(addr[0], addr[1]))
             client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             ser.rts = True
             ser.dtr = True
             # enter network <-> serial loop
-            r = Redirector(
-                ser,
-                client_socket,
-                verbose)
+            r = Redirector(ser, client_socket, verbose)
             try:
                 r.shortcircuit()
             finally:
-                logging.info('Disconnected')
+                logging.info("Disconnected")
                 r.stop()
                 client_socket.close()
                 ser.dtr = False
@@ -1328,10 +1355,12 @@ def start_port_server(listen_ip:str, listen_port:int):
                 # capable client)
                 ser.apply_settings(settings)
         except KeyboardInterrupt:
-            sys.stdout.write('\n')
+            sys.stdout.write("\n")
             break
         except socket.error as msg:
             logging.error(str(msg))
 
-    logging.info('--- exit ---')
+    logging.info("--- exit ---")
+
+
 main()
