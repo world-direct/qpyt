@@ -1,3 +1,5 @@
 # Requirements for QuecPython build and deploy tools
 pyserial>=3.5
 pyyaml>=6.0
+mpy-cross==1.12 # this is the same version as used in QuecPython SDK
+watchfiles>=0.18.0

@@ -7,6 +7,23 @@ import threading
 import time
 from io import StringIO
 
+# check for minimum python version 3.11
+if sys.version_info < (3, 11):
+    print("This script requires Python 3.11 or higher")
+    sys.exit(1)
+
+# check for required packages
+try:
+    import serial
+    import serial.tools.list_ports
+    import yaml
+    import watchfiles
+except ImportError as e:
+    print("Missing required package:", e.name)
+    print("Please install the required packages with:")
+    print("    pip install -r requirements.txt")
+    sys.exit(1)
+
 # Create parent parsers with common arguments
 global_flags = argparse.ArgumentParser(add_help=False)
 global_flags.add_argument(
@@ -218,7 +235,8 @@ class Runtime:
 
     def compile_mpy(self, source: str, dest: str):
         """Compile a .py file to .mpy using mpy-cross"""
-        runtime.run_tool([runtime.mpy_cross, "-o", dest, "-mno-unicode", source])
+        import mpy_cross
+        runtime.run_tool([mpy_cross.mpy_cross, "-o", dest, "-mno-unicode", source])
 
     def create_integrity_hash(self, file_path):
         import base64
