@@ -898,7 +898,13 @@ def build_firmware(output_dir: str = None):
         % runtime.create_integrity_hash(usr_fs_zip_path)
     )
 
+    build_eg91X(project, output_dir)
+
+def build_eg91X(project: Project, output_dir: str):
+    """Build the EG91X firmware package for flashing"""
+
     # create the customer_fs.bin using mklfs
+    # usage: mklfs -c <pack-dir> -b <block-size> -r <read-size> -p <prog-size> -s <filesystem-size> -i <image-file-path>
     hprint("create customer_fs.bin using mklfs")
     customer_fs_bin = os.path.join(runtime.temp_dir, "customer_fs.bin")
     runtime.run_tool(
@@ -913,7 +919,7 @@ def build_firmware(output_dir: str = None):
             "-p",
             "4096",
             "-s",
-            "393216",
+            str(0x60000),
             "-i",
             customer_fs_bin,
         ]
@@ -936,7 +942,7 @@ def build_firmware(output_dir: str = None):
             "-p",
             "4096",
             "-s",
-            "393216",
+            str(0x60000),
             "-i",
             customer_backup_fs_bin,
         ]
