@@ -841,7 +841,6 @@ class TerminalFileOps:
             check(parent)
 
             if not dir_exits(path):
-                print(f"Creating directory on board: {path}")
                 self.mkdir(path)
                 self.usr_files.append(BoardFile(path, -1))
 
