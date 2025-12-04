@@ -29,6 +29,11 @@ global_flags.add_argument(
     "--verbose", action="store_true", help="Enable verbose output", default=False
 )
 
+build_flags = argparse.ArgumentParser(add_help=False)
+build_flags.add_argument(
+    "--env", type=str, help="Build environment, can be used for conditions", default=""
+)
+
 serial_flags = argparse.ArgumentParser(add_help=False)
 serial_flags.add_argument(
     "--port",
@@ -55,7 +60,7 @@ parser.add_argument(
 
 watch_parser = subparsers.add_parser(
     "watch",
-    parents=[global_flags, serial_flags],
+    parents=[global_flags, serial_flags, build_flags],
     help="Watch source directory for changes and deploys it to the board",
 )
 attach_parser = subparsers.add_parser(
@@ -70,7 +75,7 @@ cleanup_parser = subparsers.add_parser(
 )
 build_parser = subparsers.add_parser(
     "build",
-    parents=[global_flags],
+    parents=[global_flags, build_flags],
     help="Build the project output files for flashing / app_fota",
 )
 build_parser.add_argument(
@@ -283,15 +288,20 @@ def print_ansi(sequence: str):
 
 
 class ProjectUsrFsEntry:
-    def __init__(self, src: str, dest: str, glob: str, compile: bool):
+    def __init__(self, src: str, dest: str, glob: str, compile: bool, when: bool):
         self.src = src
         self.dest = dest
         self.glob = glob
         self.compile = compile
+        self.when = when
 
     def glob_files(self, project: "Project"):
         # glob the source path
         import glob
+
+        if not self.when:
+            # condition is false, skip this entry
+            return []
 
         rootdir = os.path.join(project.dir, self.src)
         local_root_path = pathlib.Path(rootdir)
@@ -454,6 +464,7 @@ class Project:
         self.dir = os.path.dirname(path)
         self.usrfs_entries = []  # type: list[ProjectUsrFsEntry]
         self.usrfs = ProjectUsrFs()
+        self.env = args.env
 
     def set_version(self, version: str):
         """Set the project version"""
@@ -461,22 +472,61 @@ class Project:
 
     def load_project(self):
         import yaml
+        import re
 
         try:
             with open(self.path, "r") as f:
                 self.config = yaml.safe_load(f)
         except yaml.scanner.ScannerError as e:
-            print(f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}")
+            print(
+                f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}"
+            )
             exit(1)
         except yaml.parser.ParserError as e:
-            print(f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}")
+            print(
+                f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}"
+            )
             exit(1)
         except yaml.YAMLError as e:
             print(f"Error while parsing project: {e}")
             exit(1)
 
+        # evaluate expressions
+        def evaluate_expressions(obj):
+            """Recursively evaluate ${{ }} expressions in dict/list/str"""
+            if isinstance(obj, dict):
+                return {k: evaluate_expressions(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [evaluate_expressions(item) for item in obj]
+            elif isinstance(obj, str):
+                pattern = r"\$\{\{\s*(.*?)\s*\}\}"
+                match = re.search(pattern, obj)
+                if match:
+                    expr = match.group(1)
+                    safe_globals = {"__builtins__": {}, "env": self.env}
+                    result = evaluate_expression(expr, safe_globals)
+                    return result
+            return obj
+
+        def evaluate_expression(expr: str, context: dict):
+            try:
+                result = eval(expr, context)
+                return result
+            except SyntaxError as se:
+                print(f"Syntax error in expression '{expr}': {se.msg}")
+                exit(1)
+                return result
+            except Exception as e:
+                print(f"Error evaluating expression '{expr}': {e}")
+                return None
+
+        processed = evaluate_expressions(self.config)
+        self.config = processed
+
     def build(self):
         """Builds the project into the usrfs"""
+
+        hprint(f"Building project for env={self.env}")
         self.load_project()
         self.firmware_pac = self.config.get("firmware", "")
 
@@ -490,7 +540,8 @@ class Project:
                 src=item["src"],
                 dest=item["dest"],
                 glob=item.get("glob", "*"),
-                compile=item.get("compile", False),
+                compile=bool(item.get("compile", False)),
+                when=bool(item.get("when", True)),
             )
 
             self.usrfs_entries.append(entry)
@@ -911,6 +962,7 @@ def build_firmware(output_dir: str = None):
     )
 
     build_eg91X(project, output_dir)
+
 
 def build_eg91X(project: Project, output_dir: str):
     """Build the EG91X firmware package for flashing"""
