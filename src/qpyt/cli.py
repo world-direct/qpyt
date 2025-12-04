@@ -459,13 +459,25 @@ class Project:
         """Set the project version"""
         self.version = version
 
-    def build(self):
-        """Builds the project into the usrfs"""
+    def load_project(self):
         import yaml
 
-        with open(self.path, "r") as f:
-            self.config = yaml.safe_load(f)
+        try:
+            with open(self.path, "r") as f:
+                self.config = yaml.safe_load(f)
+        except yaml.scanner.ScannerError as e:
+            print(f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}")
+            exit(1)
+        except yaml.parser.ParserError as e:
+            print(f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}")
+            exit(1)
+        except yaml.YAMLError as e:
+            print(f"Error while parsing project: {e}")
+            exit(1)
 
+    def build(self):
+        """Builds the project into the usrfs"""
+        self.load_project()
         self.firmware_pac = self.config.get("firmware", "")
 
         # delete all existing usrfs files
