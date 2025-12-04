@@ -82,6 +82,12 @@ build_parser.add_argument(
     "--version", type=str, help="Version string for the build", default="develop"
 )
 build_parser.add_argument(
+    "--usrfs-only",
+    action="store_true",
+    help="Only build the usr filesystem",
+    default=False,
+)
+build_parser.add_argument(
     "--out-dir", type=str, help="Output directory for built firmware", default=None
 )
 subparsers.add_parser(
@@ -960,6 +966,10 @@ def build_firmware(output_dir: str = None):
         "Created usr.zip for app fota: %s"
         % runtime.create_integrity_hash(usr_fs_zip_path)
     )
+
+    if args.usrfs_only:
+        hprint("usrfs-only flag set, skipping firmware package build")
+        return
 
     build_eg91X(project, output_dir)
 
