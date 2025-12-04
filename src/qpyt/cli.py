@@ -1043,7 +1043,7 @@ def build_eg91X(project: Project, output_dir: str):
     # C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\exes\Unisoc_Fotatools\dtools pacmerge --id PY_FS_U,PS --id PY_FS_B,PS
     hprint("merge final .pac using dttools pacmerge")
     # "C:\Users\guenter.prossliner\Downloads\QPY_OCPU_EG915U_EUAB_FW\QPY_OCPU_V0006_EG915U_EUAB_FW\EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300\8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge.pac" C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\images\customer_fs.pac "C:\Users\guenter.prossliner\Downloads\QPYcom\QPYcom_V3.9.0\fw\outFW\8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge_20251030-1214.pac"[2025-10-30 12:14:56]
-    output_pac = os.path.join(output_dir, "firmware.pac")
+    output_pac = os.path.join(output_dir, "image.pac")
     runtime.run_tool(
         [
             runtime.dtools,
