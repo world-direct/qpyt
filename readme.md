@@ -71,9 +71,9 @@ src: ./src/app/portable/
 - `specific-file.ini` - Single file by name
 
 ```yaml
-glob: "**/*.py"    # All .py files recursively
-glob: "*.py"       # Only .py files in root directory
-glob: "0-factory.ini"  # Single file
+glob: "**/*.py"         # All .py files recursively
+glob: "*.py"            # Only .py files in root directory
+glob: "0-factory.ini"   # Single file
 ```
 
 ##### `dest` (required) - Destination path on the board (must be in `/usr` or subdirectories)
@@ -103,7 +103,7 @@ compile: false  # Copy files as-is
 
 **Note:** We use `mpy-cross` from [mpy-cross on pip](https://pypi.org/project/mpy-cross/).
 This is available for Linux, Windows and MacOS incl ARM Chipset. This allows us
-to use that without downloading the Quectel tools.
+to compile to .mpy without downloading the Quectel tools.
 
 Currently the version is pinned to `1.12` because this is the version used in 
 the used QuecPython version. `mpy-cross` emits a binary format that need to match
