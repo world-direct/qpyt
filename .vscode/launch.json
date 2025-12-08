@@ -7,7 +7,9 @@
             "request": "launch",
             "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
-            "args": ["watch"]
+            "args": [
+                "watch"
+            ]
         },
         {
             "name": "qphy build",
@@ -15,7 +17,9 @@
             "request": "launch",
             "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
-            "args": ["build"]
+            "args": [
+                "build"
+            ]
         },
         {
             "name": "qphy download-tools",
@@ -23,7 +27,9 @@
             "request": "launch",
             "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
-            "args": ["download-tools"]
+            "args": [
+                "download-tools"
+            ]
         },
         {
             "name": "qphy attach",
@@ -31,7 +37,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
-            "args": ["attach", "--port", "192.168.64.113:15612"]
+            "args": [
+                "attach",
+                "--port",
+                "192.168.64.113:15612"
+            ]
         },
         {
             "name": "qphy port-server",
@@ -39,7 +49,17 @@
             "request": "launch",
             "program": "${workspaceFolder}/qphy.py",
             "console": "integratedTerminal",
-            "args": ["port-server"]
+            "args": [
+                "port-server"
+            ]
+        },
+        {
+            "name": "Unit Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/tests/main.py",
+            "console": "internalConsole",
+            "args": []
         }
     ]
 }
