@@ -193,7 +193,7 @@ usrfs:
 The `build` command has a `--version` argument that allows specifing a version
 string. It it recommented but not required to use [Semantic Versioning](https://semver.org/).
 
-The version will be emitted into the generated `app_info.json` file and can 
+The version will be emitted into the generated `manifest.json` file and can 
 be read at runtime.
 
 **NOTE:** QuecPython tool `pacgen` would also support specifing a `--version` and
@@ -205,7 +205,7 @@ untouched.
 
 During build, qphy automatically generates:
 
-**`/usr/app_info.json`** - File manifest with integrity hashes
+**`/usr/manifest.json`** - File manifest with integrity hashes
 ```json
 {
   "files": [

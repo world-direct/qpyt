@@ -409,12 +409,12 @@ class ProjectUsrFs:
     def __init__(self):
         self.files = []  # type: list[ProjectUsrFsFile]
 
-        # add the app_info.json to usrfs_sysfiles
+        # add the manifest.json to usrfs_sysfiles
         self.fileinfo = ProjectUsrFsFile(
             entry=None,
             source_path=None,
-            build_path=runtime.to_temp_usrfs(Project.APP_INFO_PATH),
-            target_path=Project.APP_INFO_PATH,
+            build_path=runtime.to_temp_usrfs(Project.MANIFEST_PATH),
+            target_path=Project.MANIFEST_PATH,
         )
 
     def add_files(self, files: list["ProjectUsrFsFile"]):
@@ -422,7 +422,7 @@ class ProjectUsrFs:
         self.files.extend(files)
 
     def all_files(self) -> list["ProjectUsrFsFile"]:
-        """Get all files including app_info.json"""
+        """Get all files including manifest.json"""
         return self.files + [self.fileinfo]
 
     def remove(self, fsfile: "ProjectUsrFsFile"):
@@ -430,11 +430,11 @@ class ProjectUsrFs:
         self.files.remove(fsfile)
 
     def usr_files(self) -> list["ProjectUsrFsFile"]:
-        """Get all usr files without app_info.json"""
+        """Get all usr files without manifest.json"""
         return self.files
 
     def build(self, project: "Project"):
-        """Builds the usrfs into the temp directory including creating app_info.json"""
+        """Builds the usrfs into the temp directory including creating manifest.json"""
 
         file_list = []  # type: list[dict]
         for file in self.files:
@@ -447,21 +447,21 @@ class ProjectUsrFs:
                 }
             )
 
-        # write file list to output_dir/app_info.json
-        print("Generating app_info.json")
+        # write file list to output_dir/manifest.json
+        print("Generating manifest.json")
         import json
 
-        app_info_json_path = os.path.join(runtime.usrfs_path, "usr", "app_info.json")
-        with open(app_info_json_path, "w") as f:
-            app_info = {"version": project.version, "files": file_list}
-            json.dump(app_info, f, indent=2)
+        manifest_json_path = os.path.join(runtime.usrfs_path, "usr", "manifest.json")
+        with open(manifest_json_path, "w") as f:
+            manifest = {"version": project.version, "files": file_list}
+            json.dump(manifest, f, indent=2)
             f.flush()
 
 
 class Project:
     """Represents a Quectel project defined by project.yaml"""
 
-    APP_INFO_PATH = "/usr/app_info.json"
+    MANIFEST_PATH = "/usr/manifest.json"
 
     def __init__(self, path: str):
         self.path = path
@@ -641,10 +641,10 @@ class Project:
         for pf in project_files:
             bf = board_files_dict.get(pf.target_path)
             if bf is not None:
-                # currently we always assume app_info.json is modified, bc for edits the size will not change
+                # currently we always assume manifest.json is modified, bc for edits the size will not change
                 if (
                     bf.size != os.path.getsize(pf.build_path)
-                    or pf.target_path == Project.APP_INFO_PATH
+                    or pf.target_path == Project.MANIFEST_PATH
                 ):
                     print(
                         f"File modified: {pf.target_path} (board size: {bf.size}, project size: {os.path.getsize(pf.build_path)})"
