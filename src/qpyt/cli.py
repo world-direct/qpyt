@@ -441,7 +441,7 @@ class ProjectUsrFs:
             file.to_usr_fs()
             file_list.append(
                 {
-                    "path": runtime.to_board_fs(file.target_path),
+                    "file_name": runtime.to_board_fs(file.target_path),
                     "size": os.path.getsize(file.build_path),
                     "integrity": runtime.create_integrity_hash(file.build_path),
                 }
