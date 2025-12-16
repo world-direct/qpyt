@@ -457,6 +457,9 @@ class ProjectUsrFs:
             json.dump(manifest, f, indent=2)
             f.flush()
 
+        manifest_hash = runtime.create_integrity_hash(manifest_json_path)
+        print("manifest.json integrity hash:", manifest_hash)
+
 
 class Project:
     """Represents a Quectel project defined by project.yaml"""
@@ -962,10 +965,7 @@ def build_firmware(output_dir: str = None):
                 relative_path = os.path.relpath(file_path, runtime.usrfs_path)
                 zipf.write(file_path, relative_path)
 
-    print(
-        "Created usr.zip for app fota: %s"
-        % runtime.create_integrity_hash(usr_fs_zip_path)
-    )
+    print("Created usr.zip for app")
 
     if args.usrfs_only:
         hprint("usrfs-only flag set, skipping firmware package build")
