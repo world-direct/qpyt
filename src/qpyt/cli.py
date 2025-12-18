@@ -31,14 +31,17 @@ global_flags.add_argument(
 
 build_flags = argparse.ArgumentParser(add_help=False)
 build_flags.add_argument(
-    "--env", type=str, help="Build environment, can be used for conditions", default=""
+    "--env",
+    type=str,
+    help="Build environment, can be used for conditions, can be overridden by QPHY_ENV environment variable",
+    default="",
 )
 
 serial_flags = argparse.ArgumentParser(add_help=False)
 serial_flags.add_argument(
     "--port",
     type=str,
-    help="Serial port for deployment, can be a COM port or part of the description to auto-detect",
+    help="Serial port for deployment, can be a COM port or part of the description to auto-detect, can be overridden by QPHY_PORT environment variable",
     default="Quectel USB REPL Port",
 )
 
@@ -118,6 +121,13 @@ portserver_parser.add_argument(
 
 args = parser.parse_args()
 verbose = args.verbose
+
+# environment overrides
+if "QPHY_PORT" in os.environ:
+    args.port = os.environ["QPHY_PORT"]
+
+if "QPHY_ENV" in os.environ:
+    args.env = os.environ["QPHY_ENV"]
 
 
 def main():
