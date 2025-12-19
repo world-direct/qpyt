@@ -24,7 +24,7 @@ class Port:
             test_open.close()
             log.debug(f"Sucessfully opened and closed port {self.port_uri}")
         except Exception as e:
-            print(f"Failed to open serial port {self.port_uri}: {e}")
+            log.error(f"Failed to open serial port {self.port_uri}: {e}")
             exit(1)
 
     def start(self):
@@ -63,17 +63,16 @@ class Port:
                     # Small sleep to prevent CPU spinning
                     time.sleep(0.01)
             except serial.SerialException as se:
-                log.warning(f"Serial port error: {se}")
-                print("Serial port disconnected:")
-                print("Attempting to reconnect...")
+                log.warning(f"Serial disconnected: {se}")
+                log.info("Attempting to reconnect...")
                 try:
                     self._create_serial()
-                    print("Reconnected to serial port.")
+                    log.info("Reconnected to serial port.")
                     if self.on_reconnect:
                         self.on_reconnect()
                     continue
                 except Exception as e:
-                    print(f"Failed to reopen serial port {self.port_uri}: {e}")
+                    log.warning(f"Failed to reopen serial port {self.port_uri}: {e}")
                     time.sleep(1)
 
     def write(self, data: bytes):
@@ -87,25 +86,25 @@ class Port:
 
         # rfc2217://localhost:1111
         if port.startswith("rfc2217://"):
-            print("Using RFC2217 port:", port)
+            log.info("Using RFC2217 port:", port)
             return port
 
         # check if it is just HOST:PORT
         if ":" in port and not port.startswith("/"):
             uri = "socket://" + port
-            print("Using port:", uri)
+            log.info("Using port:", uri)
             return uri
 
         ports = list(serial.tools.list_ports.comports())
         for p in ports:
             if p.name == port:
                 # port port is specifed directly, use it
-                print("Using specified port:", p.name)
+                log.info("Using specified port:", p.name)
                 return p.name
 
             if p.description.find(port) != -1:
                 # found matching port
-                print(f"Auto-detected device on port: {p.name}")
+                log.info(f"Auto-detected device on port: {p.name}")
                 return p.name
 
         raise RuntimeError(f"Could not find serial port matching: {port}")

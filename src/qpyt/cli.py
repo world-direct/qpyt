@@ -10,22 +10,11 @@ from qpyt.ReplTerminal import ReplTerminal
 from qpyt.Runtime import Runtime
 from qpyt.Project import Project
 
-log=logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # check for minimum python version 3.11
 if sys.version_info < (3, 11):
-    print("This script requires Python 3.11 or higher")
-    sys.exit(1)
-
-# check for required packages
-try:
-    import serial  # noqa: F401
-    import watchfiles  # noqa: F401
-    import yaml  # noqa: F401
-except ImportError as e:
-    print("Missing required package:", e.name)
-    print("Please install the required packages with:")
-    print("    pip install -r requirements.txt")
+    log.error("This script requires Python 3.11 or higher")
     sys.exit(1)
 
 # Create parent parsers with common arguments
@@ -180,28 +169,6 @@ def main():
 
 runtime = Runtime(args.qpyt_dir)
 
-
-def vprint(*args, **kwargs):
-    """Prints arguments if verbose is enabled"""
-    if verbose:
-        print(*args, **kwargs)
-
-
-def hprint(*args, **kwargs):
-    """Prints a header always"""
-    # print_ansi("95")  # BRIGHT_CYAN
-    # print(*args, **kwargs)
-    # print_ansi("0")  # RESET
-    # print()
-
-    print("---------", *args, "------------")
-
-
-def print_ansi(sequence: str):
-    """Prints an ANSI escape sequence"""
-    print(f"\033[{sequence}m", end="")
-
-
 def watch():
     """Watch source directory for changes and deploy to the board"""
 
@@ -253,7 +220,9 @@ def build_firmware(output_dir: str = None):
         return
 
     from qpyt.boards.Board_EG91X import build
+
     build(runtime, project, output_dir)
+
 
 def download_tools():
     """Download required tools from Quectel"""
@@ -337,6 +306,7 @@ def download_tools():
     shutil.rmtree(extracted_subdir)
 
     log.info("Tools downloaded and extracted to %s", dest_dir)
+
 
 def attach_terminal():
     """Attach a terminal to the board"""

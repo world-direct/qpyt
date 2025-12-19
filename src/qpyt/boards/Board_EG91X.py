@@ -87,5 +87,5 @@ def build(runtime: Runtime, project: Project, output_dir: str):
         ]
     )
 
-    print("Firmware build completed. Output pac file: %s" % output_pac)
-    print("Hash of output pac: %s" % runtime.create_integrity_hash(output_pac))
+    log.info("Firmware build completed. Output pac file: %s" % output_pac)
+    log.info("Hash of output pac: %s" % runtime.create_integrity_hash(output_pac))
