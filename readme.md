@@ -27,12 +27,21 @@ is supported and tested.
 As we use hardcoded (relative) paths, and parameters for building the firmware, 
 it's unlikely that any other board works.
 
-## Local development
+## Installation
+
+You should install qpyt over pip, as it is published to [qpyt on pypi](https://pypi.org/project/qpyt/).
+
+Run `pip install qpyt` to fetch and install it locally. It is also recommented to use 
+a [Python virtual environment](https://docs.python.org/3/library/venv.html).
+
+
+### Editable install from repository
 
 To test versions that are not released yet, or to perform local debugging,
-install the package editable from the current filesystem: `pip install -e .`.
+install the package editable.
 
-It is also recommented to use a [Python virtual environment](https://docs.python.org/3/library/venv.html).
+* Clone the repo
+* Install it editable `pip install -e .`
 
 ## Project Configuration (project.yaml)
 
@@ -237,11 +246,6 @@ This file is used for:
 
 **Python Version**: Requires Python 3.11 or higher
 
-**Install Dependencies**:
-```bash
-pip install -r requirements.txt
-```
-
 ### Common Options
 
 * `--project` - Path to project.yaml (default: `./project.yaml`)
@@ -249,9 +253,21 @@ pip install -r requirements.txt
 * `--verbose` - Enable verbose output for debugging
 * `--env` - Build environment for conditional configuration (e.g., `dev`, `staging`, `production`)
 
+### Port handling
+
+For the `--port` argument you can use:
+* The port device name, like `COM11` or `/dev/ttyUSB0`
+* A part of the port description, like `Quectel USB REPL Port`. This is the default
+value. So if your board enumerates this description, you don't need to specify a 
+port at all.
+* Any valid [pyserial URL handler](https://pyserial.readthedocs.io/en/latest/url_handlers.html)
+
+You can also set the `QPYT_PORT` environment variable to specify the port.
+
 ### download-tools
 
-Download required Quectel build tools automatically.
+Download required Quectel build tools automatically. The tools are only required
+if you build the .pac file, not for any other commands, or to build `--usrfs-only`.
 
 ```bash
 qpyt download-tools [--verbose]

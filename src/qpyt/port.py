@@ -11,15 +11,20 @@ log = logging.getLogger(__name__)
 class Port:
     """Class to handle serial port communication. It also handles reestablishing of the connection."""
 
-    def __init__(self, port, on_data: callable = None):
+    def __init__(self, port, on_data: callable, on_reconnect: callable = None):
         self.on_data = on_data
+        self.on_reconnect = on_reconnect
         self.port_uri = Port.find_serial_port(port)
+
+    def test_port(self):
         try:
             # test open port
+            log.debug(f"Testing serial port {self.port_uri}")
             test_open = serial.serial_for_url(self.port_uri)
             test_open.close()
+            log.debug(f"Sucessfully opened and closed port {self.port_uri}")
         except Exception as e:
-            print(f"Failed to open serial port {port}: {e}")
+            print(f"Failed to open serial port {self.port_uri}: {e}")
             exit(1)
 
     def start(self):
@@ -30,7 +35,9 @@ class Port:
         self._reader_thread.start()
 
     def _create_serial(self):
+        log.debug(f"Opening serial port {self.port_uri}")
         self._ser = serial.serial_for_url(self.port_uri)
+        log.debug(f"Serial port {self.port_uri} opened")
         self._ser.timeout = 1
 
     def close(self):
@@ -47,6 +54,8 @@ class Port:
                     if len(data) == 0:
                         continue
 
+                    log.debug("<--" + repr(data))
+
                     # callback
                     self.on_data and self.on_data(data)
 
@@ -60,6 +69,8 @@ class Port:
                 try:
                     self._create_serial()
                     print("Reconnected to serial port.")
+                    if self.on_reconnect:
+                        self.on_reconnect()
                     continue
                 except Exception as e:
                     print(f"Failed to reopen serial port {self.port_uri}: {e}")
@@ -67,6 +78,7 @@ class Port:
 
     def write(self, data: bytes):
         """Write data to serial port"""
+        log.debug("-->" + repr(data))
         self._ser.write(data)
 
     @staticmethod
@@ -80,8 +92,8 @@ class Port:
 
         # check if it is just HOST:PORT
         if ":" in port and not port.startswith("/"):
-            uri = "rfc2217://" + port
-            print("Using RFC2217 port:", uri)
+            uri = "socket://" + port
+            print("Using port:", uri)
             return uri
 
         ports = list(serial.tools.list_ports.comports())

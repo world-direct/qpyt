@@ -1,13 +1,12 @@
 import argparse
+import logging
 import os
 import pathlib
 import shutil
 import sys
-import threading
 import time
-from io import StringIO
 
-from qpyt.port import Port
+from qpyt.ReplTerminal import ReplTerminal
 
 # check for minimum python version 3.11
 if sys.version_info < (3, 11):
@@ -123,6 +122,16 @@ portserver_parser.add_argument(
 
 args = parser.parse_args()
 verbose = args.verbose
+llevel = logging.DEBUG if verbose else logging.INFO
+
+logging.basicConfig(
+    level=llevel,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+# disable logging for some noisy modules
+logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
 # environment overrides
 if "QPYT_PORT" in os.environ:
@@ -142,21 +151,27 @@ def main():
             watch()
         except KeyboardInterrupt:
             hprint("Watch interrupted by user")
+            exit(0)
 
     if args.command == "build":
         build_firmware(args.out_dir)
+        exit(0)
 
     if args.command == "download-tools":
         download_tools()
+        exit(0)
 
     if args.command == "attach":
         attach_terminal()
+        exit(0)
 
     if args.command == "cleanup":
         cleanup_board()
+        exit(0)
 
     if args.command == "port-server":
         start_port_server(args.listen_ip, args.listen_port)
+        exit(0)
 
 
 class Runtime:
@@ -576,7 +591,7 @@ class Project:
         hprint("Building /usr filesystem into", runtime.usrfs_path)
         self.usrfs.build(self)
 
-    def watch(self, terminal: "Terminal", fops: "TerminalFileOps"):
+    def watch(self, repl_terminal: "ReplTerminal", fops: "TerminalFileOps"):
         """Watch source directory for changes and deploy to the board"""
 
         import watchfiles
@@ -630,7 +645,7 @@ class Project:
                 continue
 
             self.usrfs.build(self)
-            terminal.ensure_ready()
+            repl_terminal.ensure_ready()
 
             # process changed files
             for fsfile in changed_files:
@@ -645,7 +660,7 @@ class Project:
                 fsfile.to_usr_fs()
                 fops.cp(fsfile.build_path, fsfile.target_path)
 
-            terminal.soft_reset()
+            repl_terminal.soft_reset()
 
     def deploy_to_board(self, fops: "TerminalFileOps"):
         """Deploy the current usrfs files to the board using the given TerminalFileOps"""
@@ -686,96 +701,6 @@ class Project:
             fops.cp(local, remote)
 
 
-class Terminal:
-    PROMPT = b">>> "
-
-    def __init__(self, port, baud):
-        self.port = Port(port, self.on_data)
-        self.command_event = None
-        self.command_output = None
-        self.is_busy = True
-        self.enable_print = True
-
-        self.port.start()
-
-    def close(self):
-        self.port.close()
-
-    def on_data(self, data: bytes):
-        if len(data) == 0:
-            return
-
-        if self.enable_print:
-            sys.stdout.buffer.write(data)
-            sys.stdout.buffer.flush()
-
-        # check if data ends with the prompt ">>> "
-        if data.endswith(self.PROMPT) and self.command_event is not None:
-            # remove the prompt from the end to add to response
-            self.command_output.write(data[: -len(self.PROMPT)].decode("utf-8"))
-            self.command_event.set()
-
-        elif self.command_output is not None:
-            self.command_output.write(data.decode("utf-8"))
-
-    def execute_command(self, command, data: StringIO = None, timeout=5.0):
-        """Write a command to the serial port and wait for prompt"""
-        if args.verbose:
-            print(f"Writing command: {command}")
-
-        self.enable_print = args.verbose
-        self.command_event = threading.Event()
-
-        self.command_output = StringIO() if data is None else data
-
-        self.port.write(command.encode("utf-8") + b"\r\n")
-        if not self.command_event.wait(timeout):
-            raise TimeoutError(f"Timeout waiting for command response: {command}")
-
-        self.enable_print = True
-
-        response = self.command_output.getvalue()
-
-        # strip command echo from the start of the response
-        if response.startswith(command):
-            response = response[len(command) :].strip("\r\n")
-
-        self.command_response = None
-        self.command_event = None
-        return response
-
-    def soft_reset(self):
-        """Soft reboot the board"""
-        self.port.write(b"\x04")  # Send Ctrl+D
-        self.port.write(b"\r\n")
-        self.is_busy = True
-
-    def ensure_ready(self):
-        """Ensure that the board is in REPL mode"""
-        if self.is_busy:
-            self.interrupt()
-            self.is_busy = False
-
-    def interrupt(self, attempts=3):
-        """
-        Interrupt running QuecPython program and return to REPL
-        Sends Ctrl+C (ASCII 3) multiple times
-        """
-        if args.verbose:
-            print("Interrupting running program...")
-
-        self.enable_print = args.verbose
-        for i in range(attempts):
-            self.port.write(b"\x03")  # Send Ctrl+C
-            time.sleep(0.1)
-
-        # execute empty command to get fresh REPL prompt
-        self.execute_command("print('READY')")
-
-        if args.verbose:
-            print("Program interrupted, returned to REPL")
-
-
 class BoardFile:
     def __init__(self, path: str, size: int):
         self.path = path
@@ -783,7 +708,7 @@ class BoardFile:
 
 
 class TerminalFileOps:
-    def __init__(self, terminal: Terminal):
+    def __init__(self, terminal: ReplTerminal):
         self.terminal = terminal
         self.usr_files = []  # type: list[BoardFile]
 
@@ -891,13 +816,13 @@ def watch():
     project = Project(args.project)
     project.build()
 
-    terminal = Terminal(args.port, args.baud)
-    terminal.ensure_ready()
-    fops = TerminalFileOps(terminal)
+    repl_terminal = ReplTerminal(args.port)
+    repl_terminal.ensure_ready()
+    fops = TerminalFileOps(repl_terminal)
     project.deploy_to_board(fops)
     hprint("Resetting device and watch for changes...")
-    terminal.soft_reset()
-    project.watch(terminal, fops)
+    repl_terminal.soft_reset()
+    project.watch(repl_terminal, fops)
 
 
 def build_firmware(output_dir: str = None):
@@ -1116,7 +1041,7 @@ def attach_terminal():
     import select
     import signal
 
-    terminal = Terminal(args.port, args.baud)
+    repl_terminal = ReplTerminal(args.port)
 
     # Track Ctrl+C presses for exit
     last_interrupt = [0.0]
@@ -1128,11 +1053,11 @@ def attach_terminal():
         if current_time - last_interrupt[0] < 1.0:
             # Second Ctrl+C within 1 second - exit
             print("\n\nDetaching from terminal...")
-            terminal.close()
+            repl_terminal.close()
             sys.exit(0)
         else:
             # First Ctrl+C - send to device
-            terminal.port.write(b"\x03")
+            repl_terminal.port.write(b"\x03")
             print("\r^C (press Ctrl+C again within 1s to detach)", end="", flush=True)
             last_interrupt[0] = current_time
 
@@ -1211,7 +1136,7 @@ def attach_terminal():
                     print(f"\r[Sending escape sequence: {ch!r}]", end="", flush=True)
 
                 # Send character to device
-                terminal.port.write(ch)
+                repl_terminal.port.write(ch)
             else:
                 # Small delay to prevent CPU spinning
                 time.sleep(0.01)
@@ -1225,190 +1150,32 @@ def attach_terminal():
 
         # Restore original signal handler
         signal.signal(signal.SIGINT, original_handler)
-        terminal.close()
+        repl_terminal.close()
 
 
 def cleanup_board():
     """Cleanup /usr filesystem on the board"""
-    terminal = Terminal(args.port, args.baud)
-    terminal.ensure_ready()
-    fops = TerminalFileOps(terminal)
+    repl_terminal = ReplTerminal(args.port, args.baud)
+    repl_terminal.ensure_ready()
+    fops = TerminalFileOps(repl_terminal)
     hprint("Deleting all files in /usr on the board...")
     fops.delete_all_usr_files()
-    terminal.soft_reset()
+    repl_terminal.soft_reset()
     time.sleep(1)
-    terminal.close()
+    repl_terminal.close()
 
 
 def start_port_server(listen_ip: str, listen_port: int):
-    """Start a RFC2217 serial port server to share the device over network"""
-
-    # this is adapted from the rfc2217_server.py example in pyserial#
-    # https://github.com/pyserial/pyserial/blob/master/examples/rfc2217_server.py
-    #
-    # redirect data from a TCP/IP connection to a serial port and vice versa
-    # using RFC 2217
-    #
-    # (C) 2009-2015 Chris Liechti <cliechti@gmx.net>
-    #
-    # SPDX-License-Identifier:    BSD-3-Clause
-
-    port = Terminal.find_serial_port(args.port)
-    print(f"Starting RFC2217 server on port {listen_port}, forwarding to {port}")
-
-    import logging
-    import socket
-    import sys
-    import threading
-    import time
-
-    import serial
-    import serial.rfc2217
-
-    class Redirector(object):
-        def __init__(self, serial_instance, socket, debug=False):
-            self.serial = serial_instance
-            self.socket = socket
-            self._write_lock = threading.Lock()
-            self.rfc2217 = serial.rfc2217.PortManager(
-                self.serial,
-                self,
-                logger=logging.getLogger("rfc2217.server") if debug else None,
-            )
-            self.log = logging.getLogger("redirector")
-
-        def statusline_poller(self):
-            self.log.debug("status line poll thread started")
-            while self.alive:
-                time.sleep(1)
-                self.rfc2217.check_modem_lines()
-            self.log.debug("status line poll thread terminated")
-
-        def shortcircuit(self):
-            """connect the serial port to the TCP port by copying everything
-            from one side to the other"""
-            self.alive = True
-            self.thread_read = threading.Thread(target=self.reader)
-            self.thread_read.daemon = True
-            self.thread_read.name = "serial->socket"
-            self.thread_read.start()
-            self.thread_poll = threading.Thread(target=self.statusline_poller)
-            self.thread_poll.daemon = True
-            self.thread_poll.name = "status line poll"
-            self.thread_poll.start()
-            self.writer()
-
-        def reader(self):
-            """loop forever and copy serial->socket"""
-            self.log.debug("reader thread started")
-            while self.alive:
-                try:
-                    data = self.serial.read(self.serial.in_waiting or 1)
-                    if data:
-                        # escape outgoing data when needed (Telnet IAC (0xff) character)
-                        self.write(b"".join(self.rfc2217.escape(data)))
-                except socket.error as msg:
-                    self.log.error("{}".format(msg))
-                    # probably got disconnected
-                    break
-            self.alive = False
-            self.log.debug("reader thread terminated")
-
-        def write(self, data):
-            """thread safe socket write with no data escaping. used to send telnet stuff"""
-            with self._write_lock:
-                self.socket.sendall(data)
-
-        def writer(self):
-            """loop forever and copy socket->serial"""
-            while self.alive:
-                try:
-                    data = self.socket.recv(1024)
-                    if not data:
-                        break
-                    self.serial.write(b"".join(self.rfc2217.filter(data)))
-                except socket.error as msg:
-                    self.log.error("{}".format(msg))
-                    # probably got disconnected
-                    break
-            self.stop()
-
-        def stop(self):
-            """Stop copying"""
-            self.log.debug("stopping")
-            if self.alive:
-                self.alive = False
-                self.thread_read.join()
-                self.thread_poll.join()
-
-    if verbose:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
-
-    logging.basicConfig(level=level)
-
-    # ~ logging.getLogger('root').setLevel(logging.INFO)
-    logging.getLogger("rfc2217").setLevel(level)
-
-    # connect to serial port
-    ser = serial.serial_for_url(port, do_not_open=True)
-    ser.timeout = 3  # required so that the reader thread can exit
-    # reset control line as no _remote_ "terminal" has been connected yet
-    ser.dtr = False
-    ser.rts = False
-
-    logging.info("RFC 2217 TCP/IP to Serial redirector - type Ctrl-C / BREAK to quit")
+    """Start TCP server that can be used with the socket:// pyserial URL to connect to the serial port remotely"""
+    from qpyt.SocketServer import SocketServer
 
     try:
-        ser.open()
-    except serial.SerialException as e:
-        logging.error("Could not open serial port {}: {}".format(ser.name, e))
-        sys.exit(1)
-
-    logging.info("Serving serial port: {}".format(ser.name))
-    settings = ser.get_settings()
-
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind((listen_ip, listen_port))
-    srv.listen(1)
-    logging.info("TCP/IP port: {}".format(listen_port))
-
-    import select
-
-    while True:
-        try:
-            ready, _, _ = select.select([srv], [], [], 1.0)  # 1 second timeout
-            if not ready:
-                time.sleep(0.1)
-                continue
-
-            client_socket, addr = srv.accept()
-            logging.info("Connected by {}:{}".format(addr[0], addr[1]))
-            client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            ser.rts = True
-            ser.dtr = True
-            # enter network <-> serial loop
-            r = Redirector(ser, client_socket, verbose)
-            try:
-                r.shortcircuit()
-            finally:
-                logging.info("Disconnected")
-                r.stop()
-                client_socket.close()
-                ser.dtr = False
-                ser.rts = False
-                # Restore port settings (may have been changed by RFC 2217
-                # capable client)
-                ser.apply_settings(settings)
-        except KeyboardInterrupt:
-            sys.stdout.write("\n")
-            break
-        except socket.error as msg:
-            logging.error(str(msg))
-
-    logging.info("--- exit ---")
+        server = SocketServer(
+            port_name=args.port, listen_ip=listen_ip, listen_port=listen_port
+        )
+        server.start()
+    except KeyboardInterrupt:
+        print("Stopping port server...")
 
 
 main()

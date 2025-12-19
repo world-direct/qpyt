@@ -57,6 +57,19 @@
             "args": [
                 "port-server"
             ]
+        },
+        {
+            "name": "qpyt watch over port-server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/qpyt/cli.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/example",
+            "args": [
+                "watch",
+                "--port",
+                "localhost:15612"
+            ]
         }
     ]
 }
