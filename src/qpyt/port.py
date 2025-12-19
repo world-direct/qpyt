@@ -86,25 +86,25 @@ class Port:
 
         # rfc2217://localhost:1111
         if port.startswith("rfc2217://"):
-            log.info("Using RFC2217 port:", port)
+            log.info("Using RFC2217 port: %s", port)
             return port
 
         # check if it is just HOST:PORT
         if ":" in port and not port.startswith("/"):
             uri = "socket://" + port
-            log.info("Using port:", uri)
+            log.info("Using port: %s", uri)
             return uri
 
         ports = list(serial.tools.list_ports.comports())
         for p in ports:
             if p.name == port:
                 # port port is specifed directly, use it
-                log.info("Using specified port:", p.name)
+                log.info("Using specified port: %s", p.name)
                 return p.name
 
             if p.description.find(port) != -1:
                 # found matching port
-                log.info(f"Auto-detected device on port: {p.name}")
+                log.info("Auto-detected device on port: %s", p.name)
                 return p.name
 
         raise RuntimeError(f"Could not find serial port matching: {port}")

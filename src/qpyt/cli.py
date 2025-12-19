@@ -324,13 +324,13 @@ def attach_terminal():
 
         if current_time - last_interrupt[0] < 1.0:
             # Second Ctrl+C within 1 second - exit
-            log.info("\n\nDetaching from terminal...")
+            log.info("Detaching from terminal...")
             repl_terminal.close()
             sys.exit(0)
         else:
             # First Ctrl+C - send to device
             repl_terminal.port.write(b"\x03")
-            log.info("\r^C (press Ctrl+C again within 1s to detach)")
+            log.info("(press Ctrl+C again within 1s to detach)")
             last_interrupt[0] = current_time
 
     # Install signal handler
