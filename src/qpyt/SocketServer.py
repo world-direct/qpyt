@@ -1,5 +1,5 @@
 import socketserver
-from qpyt.Port import Port
+from qpyt.ComPort import ComPort
 import logging
 
 log = logging.getLogger(__name__)
@@ -8,7 +8,7 @@ class SocketServer:
 
     def __init__(self, port_name:str, listen_ip:str, listen_port:int):
         self.port_name = port_name
-        self.port = Port(self.port_name, self.on_data)
+        self.port = ComPort(self.port_name, self.on_data)
         self.listen_ip = listen_ip
         self.listen_port = listen_port
         self.port_started = False

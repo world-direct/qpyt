@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 
-from qpyt.Port import Port
+from qpyt.ComPort import ComPort
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class ReplTerminal:
     def __init__(self, port):
 
         # port handling
-        self.port = Port(port, self.on_data)
+        self.port = ComPort(port, self.on_data)
         self.port.test_port()
 
         # command support variables

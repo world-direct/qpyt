@@ -8,13 +8,13 @@ import serial.tools.list_ports
 log = logging.getLogger(__name__)
 
 
-class Port:
+class ComPort:
     """Class to handle serial port communication. It also handles reestablishing of the connection."""
 
     def __init__(self, port, on_data: callable, on_reconnect: callable = None):
         self.on_data = on_data
         self.on_reconnect = on_reconnect
-        self.port_uri = Port.find_serial_port(port)
+        self.port_uri = ComPort.find_serial_port(port)
 
     def test_port(self):
         try:
