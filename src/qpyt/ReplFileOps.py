@@ -3,13 +3,16 @@ import os
 
 from qpyt.ReplTerminal import ReplTerminal
 
+
 class BoardFile:
     def __init__(self, path: str, size: int):
         self.path = path
         self.size = size
 
 
-class TerminalFileOps:
+class ReplFileOps:
+    """Implements file operations on the QuecPython board via REPL commands"""
+
     def __init__(self, terminal: ReplTerminal):
         self.terminal = terminal
         self.usr_files = []  # type: list[BoardFile]

@@ -1,14 +1,25 @@
-
+import logging
 import os
 import pathlib
-import logging
 import shutil
-from qpyt import ReplTerminal, TerminalFileOps
+
+from qpyt.ReplFileOps import ReplFileOps
+from qpyt.ReplTerminal import ReplTerminal
 from qpyt.Runtime import Runtime
+
 log = logging.getLogger(__name__)
 
+
 class ProjectUsrFsEntry:
-    def __init__(self, project:"Project", src: str, dest: str, glob: str, compile: bool, when: bool):
+    def __init__(
+        self,
+        project: "Project",
+        src: str,
+        dest: str,
+        glob: str,
+        compile: bool,
+        when: bool,
+    ):
         self.project = project
         self.src = src
         self.dest = dest
@@ -162,7 +173,9 @@ class ProjectUsrFs:
                 {
                     "file_name": self.project.runtime.to_board_fs(file.target_path),
                     "size": os.path.getsize(file.build_path),
-                    "integrity": self.project.runtime.create_integrity_hash(file.build_path),
+                    "integrity": self.project.runtime.create_integrity_hash(
+                        file.build_path
+                    ),
                 }
             )
 
@@ -170,7 +183,9 @@ class ProjectUsrFs:
         print("Generating manifest.json")
         import json
 
-        manifest_json_path = os.path.join(self.project.runtime.usrfs_path, "usr", "manifest.json")
+        manifest_json_path = os.path.join(
+            self.project.runtime.usrfs_path, "usr", "manifest.json"
+        )
         with open(manifest_json_path, "w") as f:
             manifest = {"version": project.version, "files": file_list}
             json.dump(manifest, f, indent=2)
@@ -178,7 +193,6 @@ class ProjectUsrFs:
 
         manifest_hash = self.project.runtime.create_integrity_hash(manifest_json_path)
         print("manifest.json integrity hash:", manifest_hash)
-
 
 
 class Project:
@@ -283,7 +297,7 @@ class Project:
         log.info("Building /usr filesystem into", self.runtime.usrfs_path)
         self.usrfs.build(self)
 
-    def watch(self, repl_terminal: "ReplTerminal", fops: "TerminalFileOps"):
+    def watch(self, repl_terminal: "ReplTerminal", fops: "ReplFileOps"):
         """Watch source directory for changes and deploy to the board"""
 
         import watchfiles
@@ -354,8 +368,8 @@ class Project:
 
             repl_terminal.soft_reset()
 
-    def deploy_to_board(self, fops: "TerminalFileOps"):
-        """Deploy the current usrfs files to the board using the given TerminalFileOps"""
+    def deploy_to_board(self, fops: "ReplFileOps"):
+        """Deploy the current usrfs files to the board using the given ReplFileOps"""
 
         log.info("Deploying files to board...")
         board_files = fops.lsusr()
@@ -391,4 +405,3 @@ class Project:
 
             # copy file
             fops.cp(local, remote)
-

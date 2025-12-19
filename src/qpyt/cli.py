@@ -5,7 +5,7 @@ import shutil
 import sys
 import time
 
-from qpyt.TerminalFileOps import TerminalFileOps
+from qpyt.ReplFileOps import ReplFileOps
 from qpyt.ReplTerminal import ReplTerminal
 from qpyt.Runtime import Runtime
 from qpyt.Project import Project
@@ -208,7 +208,7 @@ def watch():
 
     repl_terminal = ReplTerminal(args.port)
     repl_terminal.ensure_ready()
-    fops = TerminalFileOps(repl_terminal)
+    fops = ReplFileOps(repl_terminal)
     project.deploy_to_board(fops)
     hprint("Resetting device and watch for changes...")
     repl_terminal.soft_reset()
@@ -547,7 +547,7 @@ def cleanup_board():
     """Cleanup /usr filesystem on the board"""
     repl_terminal = ReplTerminal(args.port, args.baud)
     repl_terminal.ensure_ready()
-    fops = TerminalFileOps(repl_terminal)
+    fops = ReplFileOps(repl_terminal)
     hprint("Deleting all files in /usr on the board...")
     fops.delete_all_usr_files()
     repl_terminal.soft_reset()
