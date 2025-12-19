@@ -1,0 +1,99 @@
+import logging
+import threading
+import time
+
+import serial
+import serial.tools.list_ports
+
+log = logging.getLogger(__name__)
+
+
+class Port:
+    """Class to handle serial port communication. It also handles reestablishing of the connection."""
+
+    def __init__(self, port, on_data: callable = None):
+        self.on_data = on_data
+        self.port_uri = Port.find_serial_port(port)
+        try:
+            # test open port
+            test_open = serial.serial_for_url(self.port_uri)
+            test_open.close()
+        except Exception as e:
+            print(f"Failed to open serial port {port}: {e}")
+            exit(1)
+
+    def start(self):
+        self._create_serial()
+        # Start background reader
+        self.stop_event = threading.Event()
+        self._reader_thread = threading.Thread(target=self.serial_reader, daemon=True)
+        self._reader_thread.start()
+
+    def _create_serial(self):
+        self._ser = serial.serial_for_url(self.port_uri)
+        self._ser.timeout = 1
+
+    def close(self):
+        self.stop_event.set()
+        self._reader_thread.join()
+        self._ser.close()
+
+    def serial_reader(self):
+        """Background thread to read from serial and write to stdout"""
+        while not self.stop_event.is_set():
+            try:
+                if self._ser.in_waiting > 0:
+                    data = self._ser.read(self._ser.in_waiting)
+                    if len(data) == 0:
+                        continue
+
+                    # callback
+                    self.on_data and self.on_data(data)
+
+                else:
+                    # Small sleep to prevent CPU spinning
+                    time.sleep(0.01)
+            except serial.SerialException as se:
+                log.warning(f"Serial port error: {se}")
+                print("Serial port disconnected:")
+                print("Attempting to reconnect...")
+                try:
+                    self._create_serial()
+                    print("Reconnected to serial port.")
+                    continue
+                except Exception as e:
+                    print(f"Failed to reopen serial port {self.port_uri}: {e}")
+                    time.sleep(1)
+
+    def write(self, data: bytes):
+        """Write data to serial port"""
+        self._ser.write(data)
+
+    @staticmethod
+    def find_serial_port(port: str):
+        """Try to find the serial port by name or description"""
+
+        # rfc2217://localhost:1111
+        if port.startswith("rfc2217://"):
+            print("Using RFC2217 port:", port)
+            return port
+
+        # check if it is just HOST:PORT
+        if ":" in port and not port.startswith("/"):
+            uri = "rfc2217://" + port
+            print("Using RFC2217 port:", uri)
+            return uri
+
+        ports = list(serial.tools.list_ports.comports())
+        for p in ports:
+            if p.name == port:
+                # port port is specifed directly, use it
+                print("Using specified port:", p.name)
+                return p.name
+
+            if p.description.find(port) != -1:
+                # found matching port
+                print(f"Auto-detected device on port: {p.name}")
+                return p.name
+
+        raise RuntimeError(f"Could not find serial port matching: {port}")

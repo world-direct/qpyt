@@ -7,6 +7,8 @@ import threading
 import time
 from io import StringIO
 
+from qpyt.port import Port
+
 # check for minimum python version 3.11
 if sys.version_info < (3, 11):
     print("This script requires Python 3.11 or higher")
@@ -493,8 +495,9 @@ class Project:
         self.version = version
 
     def load_project(self):
-        import yaml
         import re
+
+        import yaml
 
         try:
             with open(self.path, "r") as f:
@@ -687,54 +690,33 @@ class Terminal:
     PROMPT = b">>> "
 
     def __init__(self, port, baud):
-        import serial
-
-        port = Terminal.find_serial_port(port)
-        try:
-            self._ser = serial.serial_for_url(port)
-        except Exception as e:
-            print(f"Failed to open serial port {port}: {e}")
-            exit(1)
-        # Start background reader
-        self.stop_event = threading.Event()
+        self.port = Port(port, self.on_data)
         self.command_event = None
         self.command_output = None
-        self.enable_print = True
         self.is_busy = True
-        self._reader_thread = threading.Thread(target=self.serial_reader, daemon=True)
-        self._reader_thread.start()
+        self.enable_print = True
+
+        self.port.start()
 
     def close(self):
-        self.stop_event.set()
-        self._reader_thread.join()
-        self._ser.close()
+        self.port.close()
 
-    def serial_reader(self):
-        """Background thread to read from serial and write to stdout"""
-        while not self.stop_event.is_set():
-            if self._ser.in_waiting > 0:
-                data = self._ser.read(self._ser.in_waiting)
-                if len(data) == 0:
-                    continue
+    def on_data(self, data: bytes):
+        if len(data) == 0:
+            return
 
-                if self.enable_print:
-                    sys.stdout.buffer.write(data)
-                    sys.stdout.buffer.flush()
+        if self.enable_print:
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
 
-                # check if data ends with the prompt ">>> "
-                if data.endswith(self.PROMPT) and self.command_event is not None:
-                    # remove the prompt from the end to add to response
-                    self.command_output.write(data[: -len(self.PROMPT)].decode("utf-8"))
-                    self.command_event.set()
+        # check if data ends with the prompt ">>> "
+        if data.endswith(self.PROMPT) and self.command_event is not None:
+            # remove the prompt from the end to add to response
+            self.command_output.write(data[: -len(self.PROMPT)].decode("utf-8"))
+            self.command_event.set()
 
-                elif self.command_output is not None:
-                    self.command_output.write(data.decode("utf-8"))
-
-            else:
-                # Small sleep to prevent CPU spinning
-                import time
-
-                time.sleep(0.01)
+        elif self.command_output is not None:
+            self.command_output.write(data.decode("utf-8"))
 
     def execute_command(self, command, data: StringIO = None, timeout=5.0):
         """Write a command to the serial port and wait for prompt"""
@@ -746,7 +728,7 @@ class Terminal:
 
         self.command_output = StringIO() if data is None else data
 
-        self._ser.write(command.encode("utf-8") + b"\r\n")
+        self.port.write(command.encode("utf-8") + b"\r\n")
         if not self.command_event.wait(timeout):
             raise TimeoutError(f"Timeout waiting for command response: {command}")
 
@@ -764,8 +746,8 @@ class Terminal:
 
     def soft_reset(self):
         """Soft reboot the board"""
-        self._ser.write(b"\x04")  # Send Ctrl+D
-        self._ser.write(b"\r\n")
+        self.port.write(b"\x04")  # Send Ctrl+D
+        self.port.write(b"\r\n")
         self.is_busy = True
 
     def ensure_ready(self):
@@ -784,7 +766,7 @@ class Terminal:
 
         self.enable_print = args.verbose
         for i in range(attempts):
-            self._ser.write(b"\x03")  # Send Ctrl+C
+            self.port.write(b"\x03")  # Send Ctrl+C
             time.sleep(0.1)
 
         # execute empty command to get fresh REPL prompt
@@ -792,37 +774,6 @@ class Terminal:
 
         if args.verbose:
             print("Program interrupted, returned to REPL")
-
-    @staticmethod
-    def find_serial_port(port: str):
-        """Try to find the serial port by name or description"""
-
-        # rfc2217://localhost:1111
-        if port.startswith("rfc2217://"):
-            print("Using RFC2217 port:", port)
-            return port
-
-        # check if it is just HOST:PORT
-        if ":" in port and not port.startswith("/"):
-            uri = "rfc2217://" + port
-            print("Using RFC2217 port:", uri)
-            return uri
-
-        import serial.tools.list_ports
-
-        ports = list(serial.tools.list_ports.comports())
-        for p in ports:
-            if p.name == port:
-                # port port is specifed directly, use it
-                print("Using specified port:", p.name)
-                return p.name
-
-            if p.description.find(port) != -1:
-                # found matching port
-                print(f"Auto-detected device on port: {p.name}")
-                return p.name
-
-        raise RuntimeError(f"Could not find serial port matching: {port}")
 
 
 class BoardFile:
@@ -1181,7 +1132,7 @@ def attach_terminal():
             sys.exit(0)
         else:
             # First Ctrl+C - send to device
-            terminal._ser.write(b"\x03")
+            terminal.port.write(b"\x03")
             print("\r^C (press Ctrl+C again within 1s to detach)", end="", flush=True)
             last_interrupt[0] = current_time
 
@@ -1260,7 +1211,7 @@ def attach_terminal():
                     print(f"\r[Sending escape sequence: {ch!r}]", end="", flush=True)
 
                 # Send character to device
-                terminal._ser.write(ch)
+                terminal.port.write(ch)
             else:
                 # Small delay to prevent CPU spinning
                 time.sleep(0.01)
