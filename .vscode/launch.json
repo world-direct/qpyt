@@ -2,40 +2,40 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "qphy watch",
+            "name": "qpyt watch",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qphy.py",
+            "program": "${workspaceFolder}/qpyt.py",
             "console": "integratedTerminal",
             "args": [
                 "watch"
             ]
         },
         {
-            "name": "qphy build",
+            "name": "qpyt build",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qphy.py",
+            "program": "${workspaceFolder}/qpyt.py",
             "console": "integratedTerminal",
             "args": [
                 "build"
             ]
         },
         {
-            "name": "qphy download-tools",
+            "name": "qpyt download-tools",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qphy.py",
+            "program": "${workspaceFolder}/qpyt.py",
             "console": "integratedTerminal",
             "args": [
                 "download-tools"
             ]
         },
         {
-            "name": "qphy attach",
+            "name": "qpyt attach",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qphy.py",
+            "program": "${workspaceFolder}/qpyt.py",
             "console": "integratedTerminal",
             "args": [
                 "attach",
@@ -44,10 +44,10 @@
             ]
         },
         {
-            "name": "qphy port-server",
+            "name": "qpyt port-server",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qphy.py",
+            "program": "${workspaceFolder}/qpyt.py",
             "console": "integratedTerminal",
             "args": [
                 "port-server"

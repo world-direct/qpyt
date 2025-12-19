@@ -1,6 +1,6 @@
-# qphy - QuecPython Project Tool
+# qpyt - QuecPython Project Tool
 
-The `qphy.py` script is a comprehensive tool for QuecPython development. It manages the complete development lifecycle from building to deployment.
+The `qpyt` script is a comprehensive tool for QuecPython development. It manages the complete development lifecycle from building to deployment.
 
 ## Features
 
@@ -203,7 +203,7 @@ untouched.
 
 ### Generated Files
 
-During build, qphy automatically generates:
+During build, qpyt automatically generates:
 
 **`/usr/manifest.json`** - File manifest with integrity hashes
 ```json
@@ -224,7 +224,7 @@ This file is used for:
 - FOTA update integrity checks
 - Deployment tracking
 
-## qphy.py Commands
+## qpyt Commands
 
 ### Prerequisites
 
@@ -238,7 +238,7 @@ pip install -r requirements.txt
 ### Common Options
 
 * `--project` - Path to project.yaml (default: `./project.yaml`)
-* `--qphy-dir` - Path to qphy working directory (default: `.qphy`)
+* `--qpyt-dir` - Path to qpyt working directory (default: `.qpyt`)
 * `--verbose` - Enable verbose output for debugging
 * `--env` - Build environment for conditional configuration (e.g., `dev`, `staging`, `production`)
 
@@ -247,10 +247,10 @@ pip install -r requirements.txt
 Download required Quectel build tools automatically.
 
 ```bash
-python qphy.py download-tools [--verbose]
+qpyt download-tools [--verbose]
 ```
 
-Downloads platform-specific tools to `.qphy/tools/` directory:
+Downloads platform-specific tools to `.qpyt/tools/` directory:
 - **Windows**: QPYcom_V3.9.0 (~170 MB)
 - **Linux**: QPYcom_V3.0.1_Ubuntu24 (~170 MB)
 
@@ -261,13 +261,13 @@ Includes: `mpy-cross`, `mklfs`, `pacgen`, `dtools`, and FDL files.
 Build firmware package for flashing or app FOTA.
 
 ```bash
-python qphy.py build [OPTIONS]
+qpyt build [OPTIONS]
 ```
 
 **Options**:
 * `--version <version>` - Version string for the build (default: `develop`)
 * `--env <environment>` - Build environment (default: empty)
-* `--out-dir <path>` - Output directory (default: `.qphy/out`)
+* `--out-dir <path>` - Output directory (default: `.qpyt/out`)
 * `--usrfs-only` - Only build the `usr.zip` file, skip firmware package
 * `--verbose` - Show detailed build steps
 
@@ -278,10 +278,10 @@ python qphy.py build [OPTIONS]
 **Example**:
 ```bash
 # Build with version string
-python qphy.py build --version 1.0.0 --env production
+qpyt build --version 1.0.0 --env production
 
 # Build only usr.zip for FOTA
-python qphy.py build --usrfs-only
+qpyt build --usrfs-only
 ```
 
 ### watch
@@ -289,7 +289,7 @@ python qphy.py build --usrfs-only
 Deploy application with automatic hot reload on file changes.
 
 ```bash
-python qphy.py watch [OPTIONS]
+qpyt watch [OPTIONS]
 ```
 
 **Options**:
@@ -308,13 +308,13 @@ python qphy.py watch [OPTIONS]
 **Example**:
 ```bash
 # Watch with default port
-python qphy.py watch
+qpyt watch
 
 # Watch on specific port and env
-python qphy.py watch --port COM3 --env dev
+qpyt watch --port COM3 --env dev
 
 # Watch and use a remote port over RFC2217 (port-server)
-python qphy.py watch --port 10.0.0.50:15612
+qpyt watch --port 10.0.0.50:15612
 ```
 
 Press `Ctrl+C` to stop watching.
@@ -325,7 +325,7 @@ Attach to the board's REPL terminal for interactive Python access. It contains
 a terminal emulation supporting completions and history.
 
 ```bash
-python qphy.py attach [OPTIONS]
+qpyt attach [OPTIONS]
 ```
 
 **Options**:
@@ -340,7 +340,7 @@ python qphy.py attach [OPTIONS]
 
 **Example**:
 ```bash
-python qphy.py attach
+qpyt attach
 ```
 
 ### cleanup
@@ -348,7 +348,7 @@ python qphy.py attach
 Delete all files in `/usr` on the board.
 
 ```bash
-python qphy.py cleanup [OPTIONS]
+qpyt cleanup [OPTIONS]
 ```
 
 **Options**:
@@ -357,7 +357,7 @@ python qphy.py cleanup [OPTIONS]
 
 **Example**:
 ```bash
-python qphy.py cleanup
+qpyt cleanup
 ```
 
 ### port-server
@@ -365,7 +365,7 @@ python qphy.py cleanup
 Start an RFC 2217 serial port server to share the board over TCP/IP.
 
 ```bash
-python qphy.py port-server [OPTIONS]
+qpyt port-server [OPTIONS]
 ```
 
 **Options**:
@@ -380,17 +380,17 @@ python qphy.py port-server [OPTIONS]
 **Example**:
 ```bash
 # Start server on default port
-python qphy.py port-server
+qpyt port-server
 
 # Start server on custom port
-python qphy.py port-server --listen-port 2217
+qpyt port-server --listen-port 2217
 ```
 
 **Client Connection**:
 ```bash
 # From another machine, connect using:
-python qphy.py watch --port rfc2217://<server-ip>:15612
-python qphy.py attach --port rfc2217://<server-ip>:15612
+qpyt watch --port rfc2217://<server-ip>:15612
+qpyt attach --port rfc2217://<server-ip>:15612
 ```
 
 **NOTE:** `port-server` is adapted from the pyserial [rfc2217_server.py example](pyserialhttps://github.com/pyserial/pyserial/blob/master/examples/rfc2217_server.py)
@@ -402,14 +402,14 @@ python qphy.py attach --port rfc2217://<server-ip>:15612
 The `watch` command provides a fully automated development experience:
 
 ```bash
-python qphy.py watch
+qpyt watch
 ```
 
 **Important**: Only one application can access the serial port at a time. Close other applications like QPYcom or the [VSCode QuecPython extension](https://marketplace.visualstudio.com/items?itemName=Quectel.qpy-ide) before running watch mode.
 
 **What happens during watch mode**:
 
-1. **Build** - Constructs usr filesystem in `.qphy/temp/fs`, compiling `.py` to `.mpy`
+1. **Build** - Constructs usr filesystem in `.qpyt/temp/fs`, compiling `.py` to `.mpy`
 2. **Sync** - Deploys all files to `/usr` on the board
 3. **Reset** - Performs soft reset to restart the application
 4. **Monitor** - Watches local files for changes
@@ -431,14 +431,14 @@ future.
 
 ## Flashing Firmware
 
-Currently `qphy` doens't support flashing the `.pac` image. To flash the built firmware 
+Currently `qpyt` doens't support flashing the `.pac` image. To flash the built firmware 
 package use the QFlash tool. 
 See [Firmware Burning](https://developer.quectel.com/doc/quecpython/Application_guide/en/firmware-upgrade/firmware-burning.html) for other flashing tools.
 
 **QFlash Settings**:
 * **Port**: USB-AT Port (e.g., COM22)
 * **Baud Rate**: 115200
-* **Firmware File**: `.qphy/out/firmware.pac` (output from `qphy.py build`)
+* **Firmware File**: `.qpyt/out/firmware.pac` (output from `qpyt.py build`)
 
 ## CI/CD Integration
 
@@ -490,27 +490,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      
-      # Install and run GitVersion for automatic versioning
-      - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v1.1.1
-        with:
-          versionSpec: '5.x'
-
-      - name: Determine Version
-        uses: gittools/actions/gitversion/execute@v1.1.1
-        id: gitversion
-        with:
-          useConfigFile: true
-          configFilePath: GitVersion.yml
-
-      # Display version in build summary
-      - name: Display Version
-        run: |
-          echo "::notice title=Build Version::${{ steps.gitversion.outputs.fullSemVer }}"
-          echo "## Build Information" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.gitversion.outputs.fullSemVer }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
       # Setup Python 3.11+
       - uses: actions/setup-python@v5
@@ -524,32 +503,26 @@ jobs:
         id: cache-tools
         uses: actions/cache@v4
         with:
-          path: .qphy/tools
+          path: .qpyt/tools
           key: ${{ runner.os }}-tools
 
       - name: Install tools if not cached
         if: steps.cache-tools.outputs.cache-hit != 'true'
-        run: python qphy.py download-tools
+        run: qpyt download-tools
 
-      # Run tests before building
-      - name: Run tests
-        run: |
-          cd ./src/tests
-          python ./main.py
 
       # Build firmware with GitVersion
       - name: Build firmware
         run: |
-          echo "Building version: ${{ steps.gitversion.outputs.fullSemVer }}"
-          python qphy.py build --version "${{ steps.gitversion.outputs.fullSemVer }}"
-          echo "${{ steps.gitversion.outputs.fullSemVer }}" > .qphy/out/version.txt
+          echo "Building"
+          qpyt build --version "0.1"
       
       # Upload build artifacts
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
           name: firmware
-          path: .qphy/out/*
+          path: .qpyt/out/*
 ```
 
 #### Using Build Artifacts
@@ -570,11 +543,11 @@ To build for different environments in CI/CD, modify the build step:
 ```yaml
 # Development build
 - name: Build firmware (dev)
-  run: python qphy.py build --version "${{ steps.gitversion.outputs.fullSemVer }}" --env dev
+  run: qpyt build --version "${{ steps.gitversion.outputs.fullSemVer }}" --env dev
 
 # Production build
 - name: Build firmware (production)
-  run: python qphy.py build --version "${{ steps.gitversion.outputs.fullSemVer }}" --env production
+  run: qpyt build --version "${{ steps.gitversion.outputs.fullSemVer }}" --env production
 ```
 
 This will deploy different configuration files based on the `when:` conditions in `project.yaml`.
@@ -588,15 +561,15 @@ To test the CI build process locally:
 pip install -r requirements.txt
 
 # Download tools (cached in CI)
-python qphy.py download-tools
+qpyt download-tools
 
 # Run tests
 cd ./src/tests
-python ./main.py
+./main.py
 cd ../..
 
 # Build with a test version
-python qphy.py build --version 1.0.0-test
+qpyt build --version 1.0.0-test
 ```
 
 ## Background Information

@@ -33,7 +33,7 @@ build_flags = argparse.ArgumentParser(add_help=False)
 build_flags.add_argument(
     "--env",
     type=str,
-    help="Build environment, can be used for conditions, can be overridden by QPHY_ENV environment variable",
+    help="Build environment, can be used for conditions, can be overridden by QPYT_ENV environment variable",
     default="",
 )
 
@@ -41,7 +41,7 @@ serial_flags = argparse.ArgumentParser(add_help=False)
 serial_flags.add_argument(
     "--port",
     type=str,
-    help="Serial port for deployment, can be a COM port or part of the description to auto-detect, can be overridden by QPHY_PORT environment variable",
+    help="Serial port for deployment, can be a COM port or part of the description to auto-detect, can be overridden by QPYT_PORT environment variable",
     default="Quectel USB REPL Port",
 )
 
@@ -58,7 +58,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--qphy-dir", help="Path of qphy directory, defaults to .qphy", default=r".qphy"
+    "--qpyt-dir", help="Path of qpyt directory, defaults to .qpyt", default=r".qpyt"
 )
 
 watch_parser = subparsers.add_parser(
@@ -123,11 +123,11 @@ args = parser.parse_args()
 verbose = args.verbose
 
 # environment overrides
-if "QPHY_PORT" in os.environ:
-    args.port = os.environ["QPHY_PORT"]
+if "QPYT_PORT" in os.environ:
+    args.port = os.environ["QPYT_PORT"]
 
-if "QPHY_ENV" in os.environ:
-    args.env = os.environ["QPHY_ENV"]
+if "QPYT_ENV" in os.environ:
+    args.env = os.environ["QPYT_ENV"]
 
 
 def main():
@@ -159,17 +159,17 @@ def main():
 
 class Runtime:
     def __init__(self):
-        self.qphy_dir = args.qphy_dir
-        self.tools_dir = os.path.join(self.qphy_dir, "tools")
-        self.temp_dir = os.path.join(self.qphy_dir, "temp")
-        self.out_dir = os.path.join(self.qphy_dir, "out")
+        self.qpyt_dir = args.qpyt_dir
+        self.tools_dir = os.path.join(self.qpyt_dir, "tools")
+        self.temp_dir = os.path.join(self.qpyt_dir, "temp")
+        self.out_dir = os.path.join(self.qpyt_dir, "out")
         self.usrfs_path = os.path.join(self.temp_dir, "fs")
 
         # tools directory
         if os.name == "nt":
-            self.tools_dir = os.path.join(self.qphy_dir, "tools", "win")
+            self.tools_dir = os.path.join(self.qpyt_dir, "tools", "win")
         elif os.name == "posix":
-            self.tools_dir = os.path.join(self.qphy_dir, "tools", "linux")
+            self.tools_dir = os.path.join(self.qpyt_dir, "tools", "linux")
         else:
             raise Exception("Unsupported OS: %s" % os.name)
 
