@@ -446,6 +446,9 @@ class ProjectUsrFs:
     def build(self, project: "Project"):
         """Builds the usrfs into the temp directory including creating manifest.json"""
 
+        # ensure usrfs path exists
+        os.makedirs(os.path.join(runtime.usrfs_path, "usr"), exist_ok=True)
+
         file_list = []  # type: list[dict]
         for file in self.files:
             file.to_usr_fs()

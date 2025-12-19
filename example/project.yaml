@@ -1,0 +1,29 @@
+firmware: ./build/firmware/8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge.pac
+
+manifest:
+  copy-to: /usr/manifest.json
+
+# dest must be in /usr or subdirectories of /usr
+usrfs:
+
+# main.py resides in root of usrfs and is not compiled, as that is not supported
+- src: ./src
+  glob: "main.py"
+  dest: /usr
+
+# copy factory config file
+- src: ./etc
+  glob: factory.ini
+  dest: /usr/etc
+
+# copy dev config files 
+- src: ./etc
+  glob: "dev-*.ini"
+  dest: /usr/etc
+  when: ${{ env=="dev" }}
+
+# copy app source files, compile them
+- src: ./src/app/
+  glob: "**/*.py"
+  dest: /usr/app
+  compile: true

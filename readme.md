@@ -27,6 +27,13 @@ is supported and tested.
 As we use hardcoded (relative) paths, and parameters for building the firmware, 
 it's unlikely that any other board works.
 
+## Local development
+
+To test versions that are not released yet, or to perform local debugging,
+install the package editable from the current filesystem: `pip install -e .`.
+
+It is also recommented to use a [Python virtual environment](https://docs.python.org/3/library/venv.html).
+
 ## Project Configuration (project.yaml)
 
 The `project.yaml` file defines your QuecPython project structure, build configuration, and deployment rules. It specifies which files to include, if to compile them, and where to place them on the board.

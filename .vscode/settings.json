@@ -1,0 +1,11 @@
+{
+    "python.analysis.extraPaths": [
+        "/Users/guenter.prossliner/.vscode/extensions/quectel.qpy-ide-1.1.14/snippets/quecpython_stubs",
+        "./src/app/portable",
+        "./src/app/board",
+        "./src/app/board/components",
+        "./src/app/portable/components",
+        "c:\\Users\\guenter.prossliner\\.vscode\\extensions\\quectel.qpy-ide-1.1.14\\snippets\\quecpython_stubs",
+        "./example/src/app"
+    ]
+}

@@ -5,8 +5,9 @@
             "name": "qpyt watch",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qpyt.py",
+            "program": "${workspaceFolder}/src/qpyt/cli.py",
             "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/example",
             "args": [
                 "watch"
             ]
@@ -15,8 +16,9 @@
             "name": "qpyt build",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qpyt.py",
+            "program": "${workspaceFolder}/src/qpyt/cli.py",
             "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/example",
             "args": [
                 "build"
             ]
@@ -25,8 +27,9 @@
             "name": "qpyt download-tools",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qpyt.py",
+            "program": "${workspaceFolder}/src/qpyt/cli.py",
             "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/example",
             "args": [
                 "download-tools"
             ]
@@ -35,8 +38,9 @@
             "name": "qpyt attach",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qpyt.py",
+            "program": "${workspaceFolder}/src/qpyt/cli.py",
             "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/example",
             "args": [
                 "attach",
                 "--port",
@@ -47,19 +51,12 @@
             "name": "qpyt port-server",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/qpyt.py",
+            "program": "${workspaceFolder}/src/qpyt/cli.py",
             "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/example",
             "args": [
                 "port-server"
             ]
-        },
-        {
-            "name": "Unit Tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/tests/main.py",
-            "console": "internalConsole",
-            "args": []
         }
     ]
 }
