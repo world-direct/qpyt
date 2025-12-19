@@ -1,4 +1,4 @@
-firmware: ./build/firmware/8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge.pac
+firmware: ./firmware/8915DM_cat1_open_EG915UEUABR03A06M08_OCPU_QPY_01.300.01.300_merge.pac
 
 manifest:
   copy-to: /usr/manifest.json
