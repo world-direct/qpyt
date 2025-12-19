@@ -107,7 +107,7 @@ class ProjectUsrFsFile:
                     f"Skipping compile of {self.source_path} to {dest_path} because modification time is the same"
                 )
             else:
-                print(f"Compiling {self.source_path} to {dest_path}")
+                log.info(f"Compiling {self.source_path} to {dest_path}")
                 self.entry.project.runtime.compile_mpy(self.source_path, dest_path)
 
                 # set modification time of dest to source
@@ -127,7 +127,7 @@ class ProjectUsrFsFile:
                     f"Skipping copy of {self.source_path} to {dest_path} because modification time is the same"
                 )
             else:
-                print(f"Copying {self.source_path} to {dest_path}")
+                log.info(f"Copying {self.source_path} to {dest_path}")
                 shutil.copy2(self.source_path, dest_path)
 
 
@@ -180,7 +180,7 @@ class ProjectUsrFs:
             )
 
         # write file list to output_dir/manifest.json
-        print("Generating manifest.json")
+        log.info("Generating manifest.json")
         import json
 
         manifest_json_path = os.path.join(
@@ -192,7 +192,7 @@ class ProjectUsrFs:
             f.flush()
 
         manifest_hash = self.project.runtime.create_integrity_hash(manifest_json_path)
-        print("manifest.json integrity hash:", manifest_hash)
+        log.info("manifest.json integrity hash: %s", manifest_hash)
 
 
 class Project:
@@ -223,17 +223,17 @@ class Project:
             with open(self.path, "r") as f:
                 self.config = yaml.safe_load(f)
         except yaml.scanner.ScannerError as e:
-            print(
+            log.error(
                 f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}"
             )
             exit(1)
         except yaml.parser.ParserError as e:
-            print(
+            log.error(
                 f"Error while parsing project: {self.path}:{e.problem_mark.line + 1}:{e.problem_mark.column + 1}"
             )
             exit(1)
         except yaml.YAMLError as e:
-            print(f"Error while parsing project: {e}")
+            log.error(f"Error while parsing project: {e}")
             exit(1)
 
         # evaluate expressions
@@ -258,11 +258,11 @@ class Project:
                 result = eval(expr, context)
                 return result
             except SyntaxError as se:
-                print(f"Syntax error in expression '{expr}': {se.msg}")
+                log.error(f"Syntax error in expression '{expr}': {se.msg}")
                 exit(1)
                 return result
             except Exception as e:
-                print(f"Error evaluating expression '{expr}': {e}")
+                log.error(f"Error evaluating expression '{expr}': {e}")
                 return None
 
         processed = evaluate_expressions(self.config)
@@ -294,7 +294,7 @@ class Project:
             files = entry.glob_files(self)
             self.usrfs.add_files(files)
 
-        log.info("Building /usr filesystem into", self.runtime.usrfs_path)
+        log.info("Building /usr filesystem into %s", self.runtime.usrfs_path)
         self.usrfs.build(self)
 
     def watch(self, repl_terminal: "ReplTerminal", fops: "ReplFileOps"):
@@ -386,12 +386,15 @@ class Project:
                     bf.size != os.path.getsize(pf.build_path)
                     or pf.target_path == Project.MANIFEST_PATH
                 ):
-                    print(
-                        f"File modified: {pf.target_path} (board size: {bf.size}, project size: {os.path.getsize(pf.build_path)})"
+                    log.info(
+                        "File modified: %s (board size: %d, project size: %d)",
+                        pf.target_path,
+                        bf.size,
+                        os.path.getsize(pf.build_path),
                     )
                     files2cp.append(pf)
             else:
-                print(f"File added: {pf.target_path}")
+                log.info("File added: %s", pf.target_path)
                 files2cp.append(pf)
 
         # copy files

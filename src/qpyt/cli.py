@@ -10,6 +10,8 @@ from qpyt.ReplTerminal import ReplTerminal
 from qpyt.Runtime import Runtime
 from qpyt.Project import Project
 
+log=logging.getLogger(__name__)
+
 # check for minimum python version 3.11
 if sys.version_info < (3, 11):
     print("This script requires Python 3.11 or higher")
@@ -152,7 +154,7 @@ def main():
         try:
             watch()
         except KeyboardInterrupt:
-            hprint("Watch interrupted by user")
+            log.info("Watch interrupted by user")
             exit(0)
 
     if args.command == "build":
@@ -210,7 +212,7 @@ def watch():
     repl_terminal.ensure_ready()
     fops = ReplFileOps(repl_terminal)
     project.deploy_to_board(fops)
-    hprint("Resetting device and watch for changes...")
+    log.info("Resetting device and watch for changes...")
     repl_terminal.soft_reset()
     project.watch(repl_terminal, fops)
 
@@ -223,7 +225,7 @@ def build_firmware(output_dir: str = None):
     if output_dir is None:
         output_dir = runtime.out_dir
 
-    hprint(f"Building firmware version {project.version} into {output_dir}")
+    log.info(f"Building firmware version {project.version} into {output_dir}")
     project.build()
 
     # recreate output dir
@@ -233,7 +235,7 @@ def build_firmware(output_dir: str = None):
     os.makedirs(output_dir, exist_ok=True)
 
     # create usr.zip for app fota
-    hprint("create usr.zip for app fota")
+    log.info("create usr.zip for app fota")
     import zipfile
 
     usr_fs_zip_path = os.path.join(output_dir, "usr.zip")
@@ -244,10 +246,10 @@ def build_firmware(output_dir: str = None):
                 relative_path = os.path.relpath(file_path, runtime.usrfs_path)
                 zipf.write(file_path, relative_path)
 
-    print("Created usr.zip for app")
+    logging.info("Created usr.zip for app")
 
     if args.usrfs_only:
-        hprint("usrfs-only flag set, skipping firmware package build")
+        logging.info("usrfs-only flag set, skipping firmware package build")
         return
 
     from qpyt.boards.Board_EG91X import build
@@ -282,7 +284,7 @@ def download_tools():
     # download the tool to tmp directory
     archive_file = os.path.join(tempfile.gettempdir(), file)
     if not os.path.exists(archive_file):
-        print(f"Downloading {url} to {archive_file}")
+        log(f"Downloading {url} to {archive_file}")
 
         def download_with_progress(url, filename):
             prev_percent = -1
@@ -294,18 +296,17 @@ def download_tools():
                     min(100, downloaded * 100 // total_size) if total_size > 0 else 0
                 )
                 if percent != prev_percent:
-                    print(f"\rDownloading... {percent}%", end="", flush=True)
+                    log.info(f"\rDownloading... {percent}%")
                     prev_percent = percent
 
             urllib.request.urlretrieve(url, filename, reporthook=download_progress)
-            print()  # Move to next line after download
 
         download_with_progress(url, archive_file)
     else:
-        print(f"File {archive_file} already exists, skipping download")
+        log.warning(f"File {archive_file} already exists, skipping download")
 
     # extract the tar.gz file
-    print("Extracting tools...")
+    log.info("Extracting tools...")
     if os.name == "nt":
         import zipfile
 
@@ -317,7 +318,7 @@ def download_tools():
         with tarfile.open(archive_file, "r:gz") as tar:
             tar.extractall(path=tempfile.gettempdir(), filter="data")
 
-    print("Copying extracted files...")
+    log.info("Copying extracted files...")
     # move extracted files from subdirectory to tools directory
     extracted_subdir = os.path.join(tempfile.gettempdir(), root)
     for item in os.listdir(extracted_subdir):
@@ -332,11 +333,10 @@ def download_tools():
             shutil.move(s, d)
 
     # delete the empty directories
-    print("Cleaning up...")
+    log.info("Cleaning up...")
     shutil.rmtree(extracted_subdir)
 
-    print("Tools downloaded and extracted to %s" % dest_dir)
-
+    log.info("Tools downloaded and extracted to %s", dest_dir)
 
 def attach_terminal():
     """Attach a terminal to the board"""
@@ -354,13 +354,13 @@ def attach_terminal():
 
         if current_time - last_interrupt[0] < 1.0:
             # Second Ctrl+C within 1 second - exit
-            print("\n\nDetaching from terminal...")
+            log.info("\n\nDetaching from terminal...")
             repl_terminal.close()
             sys.exit(0)
         else:
             # First Ctrl+C - send to device
             repl_terminal.port.write(b"\x03")
-            print("\r^C (press Ctrl+C again within 1s to detach)", end="", flush=True)
+            log.info("\r^C (press Ctrl+C again within 1s to detach)")
             last_interrupt[0] = current_time
 
     # Install signal handler
@@ -420,9 +420,9 @@ def attach_terminal():
             return None
 
     try:
-        print("Attached to terminal. Type commands and press Enter.")
-        print("Press Ctrl+C twice (within 1s) to exit.")
-        print("-" * 60)
+        log.info("Attached to terminal. Type commands and press Enter.")
+        log.info("Press Ctrl+C twice (within 1s) to exit.")
+        log.info("-" * 60)
 
         # Input loop - read keyboard and send to serial
         while True:
@@ -435,7 +435,7 @@ def attach_terminal():
 
                 # Debug: show what we're sending for arrow keys
                 if args.verbose and ch.startswith(b"\x1b"):
-                    print(f"\r[Sending escape sequence: {ch!r}]", end="", flush=True)
+                    log.debug(f"[Sending escape sequence: {ch!r}]")
 
                 # Send character to device
                 repl_terminal.port.write(ch)
@@ -460,7 +460,7 @@ def cleanup_board():
     repl_terminal = ReplTerminal(args.port, args.baud)
     repl_terminal.ensure_ready()
     fops = ReplFileOps(repl_terminal)
-    hprint("Deleting all files in /usr on the board...")
+    log.info("Deleting all files in /usr on the board...")
     fops.delete_all_usr_files()
     repl_terminal.soft_reset()
     time.sleep(1)
@@ -477,7 +477,7 @@ def start_port_server(listen_ip: str, listen_port: int):
         )
         server.start()
     except KeyboardInterrupt:
-        print("Stopping port server...")
+        log.info("Stopping port server...")
 
 
 main()
