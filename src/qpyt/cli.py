@@ -253,7 +253,7 @@ def download_tools():
     # download the tool to tmp directory
     archive_file = os.path.join(tempfile.gettempdir(), file)
     if not os.path.exists(archive_file):
-        log(f"Downloading {url} to {archive_file}")
+        log.info(f"Downloading {url} to {archive_file}")
 
         def download_with_progress(url, filename):
             prev_percent = -1
@@ -265,15 +265,16 @@ def download_tools():
                     min(100, downloaded * 100 // total_size) if total_size > 0 else 0
                 )
                 if percent != prev_percent:
-                    log.info(f"\rDownloading... {percent}%")
+                    print(f"\rDownloading... {percent}%", end="", flush=True)
                     prev_percent = percent
 
             urllib.request.urlretrieve(url, filename, reporthook=download_progress)
 
         download_with_progress(url, archive_file)
+        print()  # newline after progress
     else:
         log.warning(f"File {archive_file} already exists, skipping download")
-
+    
     # extract the tar.gz file
     log.info("Extracting tools...")
     if os.name == "nt":
@@ -285,7 +286,12 @@ def download_tools():
         import tarfile
 
         with tarfile.open(archive_file, "r:gz") as tar:
-            tar.extractall(path=tempfile.gettempdir(), filter="data")
+            try:
+                tar.extractall(path=tempfile.gettempdir(), filter="data")
+            except EOFError:
+                log.warning("EOFError during extraction, archive may be corrupted, restart download")
+                os.remove(archive_file)
+                return download_tools()
 
     log.info("Copying extracted files...")
     # move extracted files from subdirectory to tools directory
