@@ -433,7 +433,7 @@ def attach_terminal():
 
 def cleanup_board():
     """Cleanup /usr filesystem on the board"""
-    repl_terminal = ReplTerminal(args.port, args.baud)
+    repl_terminal = ReplTerminal(args.port)
     repl_terminal.ensure_ready()
     fops = ReplFileOps(repl_terminal)
     log.info("Deleting all files in /usr on the board...")
