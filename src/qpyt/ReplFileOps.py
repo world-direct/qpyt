@@ -25,7 +25,8 @@ class ReplFileOps:
         # res is returned from ilistdir
         # https://developer.quectel.com/doc/quecpython/API_reference/en/stdlib/uos.html#Listing-the-Parameters-of-the-Current-Directory
         # list of tuple (name, type, inode[, size])
-        data = eval(res)
+        import ast
+        data = ast.literal_eval(res)
         return data
 
     def remove(self, path):
