@@ -1,0 +1,26 @@
+# vagrant plugin install vagrant-qemu
+# brew install qemu
+# export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "perk/ubuntu-2204-arm64"
+  
+  config.vm.provider "qemu" do |qe|
+    qe.arch = "aarch64"
+    qe.machine = "virt,accel=hvf,highmem=on"
+    qe.cpu = "host"
+    qe.net_device = "virtio-net-pci"
+    qe.memory = "4096"
+    qe.smp = "2"
+    
+    # USB passthrough - need to add USB controller first, then the device
+    qe.extra_qemu_args = %w(-device qemu-xhci -device usb-host,vendorid=0x2c7c,productid=0x0901)
+  end
+  
+  # Provision Python and dependencies
+  config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
+    apt-get install -y python3-pip python3-usb
+    pip3 install pyusb
+  SHELL
+end
