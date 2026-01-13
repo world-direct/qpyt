@@ -11,19 +11,20 @@ log = logging.getLogger(__name__)
 
 class ComPortIterator:
     """Iterator for reading data from ComPort"""
+
     def __init__(self, comport):
         self.comport = comport
         self.queue = queue.Queue()
-    
+
     def __iter__(self):
         return self
-    
+
     def __next__(self):
         data = self.queue.get()  # Block until data arrives
         if data is None:  # Sentinel value indicates disconnect or shutdown
             raise StopIteration
         return data
-    
+
     def stop(self):
         """Stop this iterator by sending a sentinel value"""
         self.queue.put(None)
@@ -32,9 +33,8 @@ class ComPortIterator:
 class ComPort:
     """Class to handle serial port communication. It also handles reestablishing of the connection."""
 
-    def __init__(self, port, on_data: callable = None, on_reconnect: callable = None):
+    def __init__(self, port, on_data: callable = None):
         self.on_data = on_data
-        self.on_reconnect = on_reconnect
         self.port_uri = ComPort.find_serial_port(port)
         self._iterators = []  # Track all active iterators
 
@@ -73,7 +73,7 @@ class ComPort:
         for it in self._iterators:
             it.queue.put(None)
         self._iterators.clear()
-        
+
         self.stop_event.set()
         self._reader_thread.join()
         self._ser.close()
@@ -109,13 +109,11 @@ class ComPort:
 
                 # clear iterators as they may be restarted after
                 self._iterators.clear()
-                
+
                 log.info("Attempting to reconnect...")
                 try:
                     self._create_serial()
                     log.info("Reconnected to serial port.")
-                    if self.on_reconnect:
-                        self.on_reconnect()
                     continue
                 except Exception as e:
                     log.warning(f"Failed to reopen serial port {self.port_uri}: {e}")
