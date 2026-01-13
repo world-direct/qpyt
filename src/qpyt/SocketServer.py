@@ -1,6 +1,7 @@
 import logging
 import socket
 import socketserver
+import threading
 
 from qpyt.ComPort import ComPort
 
@@ -10,39 +11,66 @@ class SocketServer:
 
     def __init__(self, port_name:str, listen_ip:str, listen_port:int):
         self.port_name = port_name
-        self.port = ComPort(self.port_name, self.on_data)
+        self.port = ComPort(self.port_name)
         self.listen_ip = listen_ip
         self.listen_port = listen_port
-        self.port_started = False
-        self.client = None
 
     class TCPHandler(socketserver.BaseRequestHandler):
+
+        def port(self)->ComPort:
+            """Return the ComPort instance from the server"""
+            return self.server.ss.port
 
         def handle(self):
             log.info("Client connected from {}".format(self.client_address))
 
-            if self.server.ss.client is not None:
-                log.info("Another client is already connected, closing that for new connection!")
-                self.server.ss.client.close()
-                self.request.close()
-                return
+            # Event to signal when either socket or serial should stop
+            stop_event = threading.Event()
+            
+            # Get iterator and keep reference so we can stop it
+            port_iterator = iter(self.port())
 
-            self.server.ss.client = self.request
-            while True:
-                try:
-                    data = self.request.recv(100)
-                    if len(data) == 0:
-                        log.info("Client disconnected")
+            # use a background thread to read from the socket
+            def socket_reader(request):
+                while not stop_event.is_set():
+                    try:
+                        data = request.recv(1024)
+                        if not data:
+                            log.info("Client disconnected")
+                            stop_event.set()
+                            port_iterator.stop()  # Unblock the iterator
+                            break
+                        log.debug("-SOCKET- {} bytes -> SERIAL".format(len(data)))
+                        self.port().write(data)
+                    except Exception as e:
+                        log.error(f"Error reading from socket: {e}")
+                        stop_event.set()
+                        port_iterator.stop()  # Unblock the iterator
                         break
-                except ConnectionResetError:
-                    log.info("Client disconnected")
+
+            socket_thread = threading.Thread(target=socket_reader, args=(self.request,), daemon=True)
+            socket_thread.start()
+
+            # we use the main thread for read from port
+            for data in port_iterator:
+                if stop_event.is_set():
+                    log.info("Client disconnected, stopping serial read")
+                    break
+                    
+                if data is None:
+                    log.info("Serial port disconnected, closing client connection")
                     break
 
-                log.debug("-SOCKET- {} bytes -> SERIAL".format(len(data)))
-                self.server.ss.port.write(data)
-
-            log.debug("Forgetting client")
-            self.server.ss.client = None
+                try:
+                    log.debug("-SERIAL- {} bytes -> SOCKET".format(len(data)))
+                    self.request.sendall(data)
+                except Exception as e:
+                    log.error(f"Error writing to socket: {e}")
+                    break
+            
+            stop_event.set()  # Ensure socket reader stops
+            socket_thread.join(timeout=1)  # Wait for socket reader to finish
+            log.info("Connection handler finished")
 
     def start(self):
         """Start TCP server that can be used with the socket:// pyserial URL to connect to the serial port remotely"""
@@ -65,19 +93,6 @@ class SocketServer:
                 log.info(f"Started socket server on {self.listen_ip}:{self.listen_port}, forwarding to {self.port_name}")
             server.ss = self
             server.serve_forever()
-
-    def on_data(self, data: bytes):
-        """Callback when data is received from serial port"""
-
-        if self.client is None:
-            log.debug("No client connected, dropping %d bytes of data", len(data))
-            return
-
-        log.debug("-SERIAL- {} bytes -> SOCKET".format(len(data)))
-        self.client.sendall(data)
-        log.debug(data.decode())
-
-        pass
 
 def get_local_ip_addresses():
     ip_list = []

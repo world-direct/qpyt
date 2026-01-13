@@ -1,4 +1,5 @@
 import logging
+import queue
 import threading
 import time
 
@@ -8,13 +9,40 @@ import serial.tools.list_ports
 log = logging.getLogger(__name__)
 
 
+class ComPortIterator:
+    """Iterator for reading data from ComPort"""
+    def __init__(self, comport):
+        self.comport = comport
+        self.queue = queue.Queue()
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        data = self.queue.get()  # Block until data arrives
+        if data is None:  # Sentinel value indicates disconnect or shutdown
+            raise StopIteration
+        return data
+    
+    def stop(self):
+        """Stop this iterator by sending a sentinel value"""
+        self.queue.put(None)
+
+
 class ComPort:
     """Class to handle serial port communication. It also handles reestablishing of the connection."""
 
-    def __init__(self, port, on_data: callable, on_reconnect: callable = None):
+    def __init__(self, port, on_data: callable = None, on_reconnect: callable = None):
         self.on_data = on_data
         self.on_reconnect = on_reconnect
         self.port_uri = ComPort.find_serial_port(port)
+        self._iterators = []  # Track all active iterators
+
+    def __iter__(self):
+        """Create and return a new iterator"""
+        iterator = ComPortIterator(self)
+        self._iterators.append(iterator)
+        return iterator
 
     def test_port(self):
         try:
@@ -41,6 +69,11 @@ class ComPort:
         self._ser.timeout = 1
 
     def close(self):
+        # Wake up all blocked iterators with sentinel
+        for it in self._iterators:
+            it.queue.put(None)
+        self._iterators.clear()
+        
         self.stop_event.set()
         self._reader_thread.join()
         self._ser.close()
@@ -56,14 +89,27 @@ class ComPort:
 
                     log.debug("<--" + repr(data))
 
+                    # Feed all active iterators
+                    for it in self._iterators:
+                        it.queue.put(data)
+
                     # callback
-                    self.on_data and self.on_data(data)
+                    if self.on_data:
+                        self.on_data(data)
 
                 else:
                     # Small sleep to prevent CPU spinning
                     time.sleep(0.01)
             except serial.SerialException as se:
                 log.warning(f"Serial disconnected: {se}")
+
+                # Signal all active iterators to stop
+                for it in self._iterators:
+                    it.queue.put(None)
+
+                # clear iterators as they may be restarted after
+                self._iterators.clear()
+                
                 log.info("Attempting to reconnect...")
                 try:
                     self._create_serial()
